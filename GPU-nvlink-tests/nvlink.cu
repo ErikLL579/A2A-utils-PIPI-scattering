@@ -12,7 +12,7 @@ using namespace Grid;
 using namespace std;
 
 const int TSRC = 0;  //timeslice where rho is nonzero
-const int VDIM = 120; //length of each vector
+const int VDIM = 2500; //length of each vector
 
 typedef typename DomainWallFermionD::ComplexField ComplexField;
 typedef typename DomainWallFermionD::FermionField FermionField;

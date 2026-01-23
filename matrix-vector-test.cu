@@ -12,7 +12,7 @@ using namespace Grid;
 using namespace std;
 
 const int TSRC = 0;  //timeslice where rho is nonzero
-const int VDIM = 88; //length of each vector
+const int VDIM = 500; //length of each vector
 
 typedef typename DomainWallFermionD::ComplexField ComplexField;
 typedef typename DomainWallFermionD::FermionField FermionField;
@@ -38,16 +38,16 @@ int main(int argc, char *argv[])
   // MesonField lhs and rhs vectors
   const int Nem=1;
   std::vector<FermionField> phi(VDIM,&grid);
-  std::vector<ComplexField> B0(Nem,&grid);
-  std::vector<ComplexField> B1(Nem,&grid);
+//  std::vector<ComplexField> B0(Nem,&grid);
+//  std::vector<ComplexField> B1(Nem,&grid);
   std::cout << GridLogMessage << "Initialising random meson fields" << std::endl;
   for (unsigned int i = 0; i < VDIM; ++i){
     random(pRNG,phi[i]);
   }
-  for (unsigned int i = 0; i < Nem; ++i){
-    random(pRNG,B0[i]);
-    random(pRNG,B1[i]);
-  }
+//  for (unsigned int i = 0; i < Nem; ++i){
+//    random(pRNG,B0[i]);
+//    random(pRNG,B1[i]);
+//  }
   std::cout << GridLogMessage << "Meson fields initialised, rho non-zero only for t = " << TSRC << std::endl;
 
   // Gamma matrices used in the contraction
