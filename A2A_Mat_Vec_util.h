@@ -80,11 +80,9 @@ public:
 
 
 
-
 };
 
-/////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
 
 // the below already enters from the normal A2Autils header
 //const int A2Ablocking=8;
@@ -231,24 +229,27 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // ex single Meson field: 2700 * 2700 * 16 ~ 11MB
     // Perlmutter A100 has 40GB memory => 300 matrices = ~ 32 GB with 8GB for system
   
-    int max_batch_size = 100;
+    const int max_batch_size = 100;
+    int batch_size = 50; // to start
 
     // total number of matrices
-    // timeslices * num_momenta
-    // ex: 64 * 4 = 156
+    // timeslices * num_momenta 
+    // ex: 24^3 x 64 ensemble: 64 * 4 = 156 pion mesonfields per config
 
     // set up memory on device
     int Ncomplex = Nmodes * Nmodes * batch_size;
   
-    deviceVector<CComplex> A(Ncomplex);
-    deviceVector<CComplex> B(Ncomplex);
-    deviceVector<Ccomplex> C(Ncomplex);
+    deviceVector<CComplex> A(Ncomplex); // input vectors
+    deviceVector<Ccomplex> C(Ncomplex); // result of matrix operations on device
 
     // need to parse the input Eigen matrix appropriately
     // also only computing at tsrc = 0,8,... , so this avoids the 'double calculating' part I was worried about on connected diagrams.o
 
+    // Input mesonfield Mpp(i, j, k, l)
+    // use Mpp.data() to copy to device => Offset = i*(Nt*Nmodes*Nmodes) + j*(Nmodes*Nmodes) + k*(Nmodes) + l 
+
     for(int i=0; i<batch_size; i++) {
-      auto a = Mesonfield.chip()
+      auto a = Mesonfield
       acceleratorCopyToDevice()
     }
 
