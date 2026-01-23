@@ -2,23 +2,6 @@
 #include <Grid/Grid_Eigen_Tensor.h>
 
 
-// ////////////////////////////////////////////////////////////
-//     A2A contraction utilities for pipi scattering
-// ////////////////////////////////////////////////////////////
-// Fig 1. https://rbc.phys.columbia.edu/rbc_ukqcd/individual_postings/ellundstrum/K_to_pipi/pipi-scattering/pi_pi_scattering_A2A.pdf
-// Eq. 5 & 6
-// D({p_i}, {t_i}) = \sum_{z1,z2} [\sum_{i1, i2, i3} PI_{i3i1}(p_1, t_1) PI_{i1i2}(p_2, t_2) <w_{i2}(z1)| G |v_{i3}(z1)> ]
-//                               *[\sum_{j1, j2, j3} PI_{j3j1}(p_3, t_3) PI_{j1j2}(p_4, t_4) <w_{j2}(z2)| G |v_{j3}(z2)> ]
-//
-// Function below executes series of matrix-vector operations
-//
-// y^{i1}(p, z1, t) = \sum_{i2} PI_{i1i2}(p, t) <w_{i2}(z1)| G
-//
-//
-// ////////////////////////////////////////////////////////////
-// ////////////////////////////////////////////////////////////
-
-
 NAMESPACE_BEGIN(Grid);
 
 // From /Grid/qcd/utils/A2Autils.h
@@ -44,11 +27,60 @@ public:
 
   // apply gamma_mu at the end
 
+// ////////////////////////////////////////////////////////////
+//     A2A contraction utilities for pipi scattering
+// ////////////////////////////////////////////////////////////
+// Fig 1. https://rbc.phys.columbia.edu/rbc_ukqcd/individual_postings/ellundstrum/K_to_pipi/pipi-scattering/pi_pi_scattering_A2A.pdf
+// Eq. 5 & 6
+// D({p_i}, {t_i}) = \sum_{z1,z2} [\sum_{i1, i2, i3} PI_{i3i1}(p_1, t_1) PI_{i1i2}(p_2, t_2) <w_{i2}(z1)| G |v_{i3}(z1)> ]
+//                               *[\sum_{j1, j2, j3} PI_{j3j1}(p_3, t_3) PI_{j1j2}(p_4, t_4) <w_{j2}(z2)| G |v_{j3}(z2)> ]
+//
+// Function below executes series of matrix-vector operations
+//
+// y^{i1}(p, z1, t) = \sum_{i2} PI_{i1i2}(p, t) <w_{i2}(z1)| G
+//
+//
+// ////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////
+
+
+
   // returns Fermionfield y with one outstanding A2A index i1
   template <typename TensorType>
   static void ContractMesonFieldAndVector(FermionField *y_i1,
                          const TensorType &meson_field_ij,
                          const FermionField *wj);
+
+
+/*
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+// See for example Eq. (A9)
+// https://arxiv.org/pdf/2301.09286 (Masaaki pi-pi scattering PBC)
+//
+// Operation:
+// Tr(Pi(p_1, t_1) \cdot Pi(p_2, t_2\) =  \sum_{i,j} Pi_{ij}(p_1, t_1) Pi_{ji}(p_2,t_2))
+//
+// for 0 < i,j < 2768
+//
+// Manageable on CPU but for many momenta p and times t it is better to do batched BLAS jobs
+// (i.e. Perlmutter is down for maintaince and I am bored)
+///////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////
+*/
+
+
+
+// Generic Mesonfield type:
+// Eigen::Tensor<ComplexD,4, Eigen::RowMajor> Mpp(momenta.size(),Nt,Nmodes,Nmodes);
+
+  template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
+  static void TraceMesonFields(TensorType_mesonfield &Mesonfield,
+                               TensorType_TraceMomTime &Result);
+
+
+
+
 };
 
 /////////////////////////////////////////////////////////
@@ -173,5 +205,56 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
 */
 };
+
+
+
+  template<class FImpl>
+  template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
+  void TraceMesonFields(TensorType_mesonfield &Mesonfield,
+                        TensorType_TraceMomTime &Result) 
+ {
+    const int block=A2Ablocking;
+    typedef typename vobj::scalar_object sobj;
+    typedef typename vobj::scalar_type scalar_type;
+    typedef typename vobj::vector_type vector_type;
+ 
+
+    int num_momenta = Mesonfield.dimension(0);
+    int timeslices  = Mesonfield.dimension(2);
+    int Nmodes = Mesonfield.dimension(3);
+
+    // make sure mesonfield is what I expect
+    GRID_ASSERT(Nmodes == Mesonfield.dimension(4));
+  
+  
+    // need to write something to determine batch size based on available device memory
+    // ex single Meson field: 2700 * 2700 * 16 ~ 11MB
+    // Perlmutter A100 has 40GB memory => 300 matrices = ~ 32 GB with 8GB for system
+  
+    int max_batch_size = 100;
+
+    // total number of matrices
+    // timeslices * num_momenta
+    // ex: 64 * 4 = 156
+
+    // set up memory on device
+    int Ncomplex = Nmodes * Nmodes * batch_size;
+  
+    deviceVector<CComplex> A(Ncomplex);
+    deviceVector<CComplex> B(Ncomplex);
+    deviceVector<Ccomplex> C(Ncomplex);
+
+    // need to parse the input Eigen matrix appropriately
+    // also only computing at tsrc = 0,8,... , so this avoids the 'double calculating' part I was worried about on connected diagrams.o
+
+    for(int i=0; i<batch_size; i++) {
+      auto a = Mesonfield.chip()
+      acceleratorCopyToDevice()
+    }
+
+};
+
+
+
 
 NAMESPACE_END(Grid);
