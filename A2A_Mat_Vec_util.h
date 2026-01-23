@@ -116,7 +116,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   typedef typename vobj::scalar_type scalar_type;
   typedef typename vobj::vector_type vector_type;
 
-  const int Nmodes = 8; //= meson_field_ij.dimension(0);
+  const int Nmodes = meson_field_ij.dimension(0);
 
   /*
   // check that the meson field is what I expect
@@ -208,8 +208,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
   template<class FImpl>
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
-  void TraceMesonFields(TensorType_mesonfield &Mesonfield,
-                        TensorType_TraceMomTime &Result) 
+  void PipiA2Autils<FImpl>::TraceMesonFields(TensorType_mesonfield &Mesonfield,
+                                             TensorType_TraceMomTime &Result) 
  {
     const int block=A2Ablocking;
     typedef typename vobj::scalar_object sobj;
@@ -239,8 +239,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // set up memory on device
     int Ncomplex = Nmodes * Nmodes * batch_size;
   
-    deviceVector<CComplex> A(Ncomplex); // input vectors
-    deviceVector<Ccomplex> C(Ncomplex); // result of matrix operations on device
+    deviceVector<ComplexD> A(Ncomplex); // input vectors
+    deviceVector<ComplexD> C(Ncomplex); // result of matrix operations on device
 
     // need to parse the input Eigen matrix appropriately
     // also only computing at tsrc = 0,8,... , so this avoids the 'double calculating' part I was worried about on connected diagrams.o
@@ -248,10 +248,10 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // Input mesonfield Mpp(i, j, k, l)
     // use Mpp.data() to copy to device => Offset = i*(Nt*Nmodes*Nmodes) + j*(Nmodes*Nmodes) + k*(Nmodes) + l 
 
-    for(int i=0; i<batch_size; i++) {
-      auto a = Mesonfield
-      acceleratorCopyToDevice()
-    }
+//    for(int i=0; i<batch_size; i++) {
+//      auto a = Mesonfield
+//      acceleratorCopyToDevice()
+//    }
 
 };
 
