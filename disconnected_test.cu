@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
   int times = 24;
 
   Eigen::Tensor<ComplexD, 4, Eigen::RowMajor> M_test(moms ,times, VDIM, VDIM);
-  Eigen::Tensor<ComplexD, 3, Eigen::RowMajor> Results;
+  Eigen::Tensor<ComplexD, 3, Eigen::RowMajor> Results(moms * times, VDIM, VDIM);
   //M_test = Mpp.chip(0, 0).chip(0, 0).chip(0, 0);
 
   Results.setZero();
