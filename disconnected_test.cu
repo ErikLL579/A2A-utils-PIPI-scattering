@@ -31,8 +31,8 @@ int main(int argc, char *argv[])
 
   //Eigen::Tensor<ComplexD,5, Eigen::RowMajor> Mpp(momenta.size(),Gmu.size(),Nt,VDIM,VDIM);
 
-  int moms = 4;
-  int times = 24;
+  int moms = 5;
+  int times = 7;
 
   Eigen::Tensor<ComplexD, 4, Eigen::RowMajor> M_test(moms ,times, VDIM, VDIM);
   Eigen::Tensor<ComplexD, 3, Eigen::RowMajor> Results;
@@ -47,9 +47,10 @@ int main(int argc, char *argv[])
 
 
   vector<int> contractions;
-  for(int h=0, h<35; h++) contractions.push_back(h);
+  for(int h=0; h<35; h++) contractions.push_back(h);
 
-  PipiA2Autils<WilsonImplR>::MesonField_MesonField_disconnected(M_test, Result, contractions);
+  PipiA2Autils<WilsonImplR>::MesonField_MesonField_disconnected(M_test, Results, contractions);
+
 
   // epilogue
   std::cout << GridLogMessage << "Grid is finalizing now" << std::endl;
