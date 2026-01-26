@@ -39,7 +39,9 @@ int main(int argc, char *argv[])
   //M_test = Mpp.chip(0, 0).chip(0, 0).chip(0, 0);
 
   Results.setZero();
-  M_test.setRandom();
+  M_test.setConstant(ComplexD(0.0001, 0.0));
+  //M_test.setRandom();
+  //M_test.setZero();
 
   //template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   //static void MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
@@ -54,7 +56,7 @@ int main(int argc, char *argv[])
 
 
   cout<< GridLogMessage << "=============== TEST RESULST MATRIX =================" <<endl;
-  cout<< GridLogMessage << "COMPONENT (1, 2400, 1) =  " << Results(1, 2400, 1) << endl;
+  cout<< GridLogMessage << "COMPONENT (25, 2400, 2300) =  " << Results(25, 2400, 2300) << endl;
 
   // epilogue
   std::cout << GridLogMessage << "Grid is finalizing now" << std::endl;
