@@ -64,7 +64,7 @@ public:
 // for 0 < i,j < 2768
 //
 // Manageable on CPU but for many momenta p and times t it is better to do batched BLAS jobs
-// (i.e. Perlmutter is down for maintaince and I am bored)
+// (gotta go fast)
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////
 */
@@ -75,9 +75,16 @@ public:
 // Eigen::Tensor<ComplexD,4, Eigen::RowMajor> Mpp(momenta.size(),Nt,Nmodes,Nmodes);
 
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
-  static void MesonField_MesonField(TensorType_mesonfield &Mesonfield,
-                               TensorType_TraceMomTime &Result,
-                               vector<vector<int> > &time_mom_contractions);
+  static void MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
+                                              TensorType_TraceMomTime &Result,
+                                              vector<vector<int> > &time_mom_contractions);
+
+
+  template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
+  static void MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
+                                              TensorType_TraceMomTime &Result,
+                                              vector<vector<int> > &time_mom_contractions);
+
 
 
 
@@ -206,12 +213,109 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 };
 
 
+   template<class FImpl>
+  template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
+  void PipiA2Autils<FImpl>::MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
+                                                            TensorType_TraceMomTime &Result,
+                                                            vector<vector<int> > &time_mom_contractions)
+    
+{
+    const int block=A2Ablocking;
+    typedef typename vobj::scalar_object sobj;
+    typedef typename vobj::scalar_type scalar_type;
+    typedef typename vobj::vector_type vector_type;
+    
+    
+    int num_momenta = Mesonfield.dimension(0);
+    int timeslices  = Mesonfield.dimension(2);
+    int Nmodes = Mesonfield.dimension(3);  
+    
+    // make sure mesonfield is what I expect
+    GRID_ASSERT(Nmodes == Mesonfield.dimension(4));
+      
+      
+    // need to write something to determine batch size based on available device memory
+    // ex single Meson field: 2700 * 2700 * 16 ~ 11MB
+    // Perlmutter A100 has 40GB memory => 300 matrices = ~ 32 GB with 8GB for system
+      
+    const int max_batch_size = 100;
+    int batch_size = 50; // to start
+    
+    // total number of matrices
+    // timeslices * num_momenta * 2 mom orientations
+    // ex: 24^3 x 64 ensemble: 64 * 4 * 2 = 312 pion mesonfields per config
+    
+    // set up memory on device
+    int Ncomplex = Nmodes * Nmodes * batch_size;
+    
+    deviceVector<ComplexD> A(Ncomplex); // input vectors
+    deviceVector<ComplexD> C(Ncomplex); // result of matrix operations on device
+                                                            
+    // need to parse the input Eigen matrix appropriately
+    // compute DC pieces at all tsrc
+    
+    // Input mesonfield Mpp(i, j, k, l)
+    // use Mpp.data() to copy to device => Offset = i*(Nt*Nmodes*Nmodes) + j*(Nmodes*Nmodes) + k*(Nmodes) + l
+    
+    acceleratorCopyToDevice(MesonField.data(), &A[Nmodes * Nmodes * batch_size], Nmodes * Nmodes * batch_size * sizeof(ComplexD))
+     
+    deviceVector<ComplexD* > As(batch_size);
+    // Same matrices as in As but in the order necessary for the contraction
+    deviceVector<ComplexD* > Bs(batch_size);
+    deviceVector<ComplexD* > Cs(batch_size);
+    
+    // vector of which matrices to contract
+    // vector<int> B_mesonfields = (back-to-back momenta evaluated at tsrc and tsrc + Delta, to be combined later);
+
+    for(int b=0; b<batch_size; b++) {
+      ComplexD *ptr;
+      ptr = &A[b * Nmodes * Nmodes];
+      acceleratorPut(As[b], ptr);
+      \\ this is where I need the contractions necessary to craft the appropriate B vector
+      ptr = &A[B_mesonfields[b] * Nmodes * Nmodes]
+      acceleratorPut(Bs[b], ptr);
+    }
+    
+    ComplexD alpha(1.0);
+    ComplexD beta(0.0);
+    RealD flops = 8.0 * Nmodes * Nmodes * Nmodes * BATCH;
+    
+
+    RealD t0 = usecond();
+
+    // perform the matrix multiplication
+    // (check that the matrices are transposed correctly)
+    gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As, Bs, beta, Cs);
+
+    RealD t1 = usecond();
+    flops = flops / (t1 - t0) / 1.e3;
+
+    cout << GridLogMessage << "=================================================== " << endl;
+    cout << GridLogMessage << "=================================================== " << endl;
+    cout << GridLogMessage << "TOTAL TIME BATCHED GEMM = " << (t1 - t0) / 1.e3 << endl;
+    cout << GridLogMessage << "FLOPS = "  <<  flops << endl; 
+    cout << GridLogMessage << "=================================================== " << endl;
+    cout << GridLogMessage << "=================================================== " << endl;
+    
+
+    // write out the DC pieces for use in zeroth order diagrams and EM corrections to DC diagram
+    cout << GridLogMessage << "COPYING RESULTS TO HOST" << endl;
+    
+    //Eigen::Tensor<ComplexD,4, Eigen::RowMajor> c(momenta.size(),Nt,Nmodes,Nmodes);
+    acceleratorCopyFromDevice(&C, Result.data(), Nmodes * Nmodes * sizeof(ComplexD) * batch_size);              
+    
+};
+    
+
+
+
+
 
   template<class FImpl>
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
-  void PipiA2Autils<FImpl>::MesonField_MesonField(TensorType_mesonfield &Mesonfield,
-                                             TensorType_TraceMomTime &Result,
-                                             vector<vector<int> > &time_mom_contractions) 
+  void PipiA2Autils<FImpl>::MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
+                                                            TensorType_TraceMomTime &Result,
+                                                            vector<vector<int> > &time_mom_contractions) 
  
 {
     const int block=A2Ablocking;
