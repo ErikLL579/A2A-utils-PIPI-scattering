@@ -77,13 +77,13 @@ public:
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
                                               TensorType_TraceMomTime &Result,
-                                              vector<vector<int> > &time_mom_contractions);
+                                              vector<int> &time_mom_contractions);
 
 
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
                                               TensorType_TraceMomTime &Result,
-                                              vector<vector<int> > &time_mom_contractions);
+                                              vector<int> &time_mom_contractions);
 
 
 
@@ -217,7 +217,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
                                                             TensorType_TraceMomTime &Result,
-                                                            vector<vector<int> > &time_mom_contractions)
+                                                            vector<int> &time_mom_contractions)
 {
     const int block=A2Ablocking;
     typedef typename vobj::scalar_object sobj;
@@ -236,14 +236,17 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // Perlmutter A100 has 40GB memory => 300 matrices = ~ 32 GB with 8GB for system
 
     const int max_batch_size = 100;
-    int batch_size = 50; // to start
+    const int contractions = time_mom_contractions.size();
+
+    GRID_ASSERT(contractions < max_batch_size);
+    //int batch_size = 50; // to start
 
     // total number of matrices
     // timeslices * num_momenta * 2 mom orientations
     // ex: 24^3 x 64 ensemble: 64 * 4 * 2 = 312 pion mesonfields per config
 
     // set up memory on device
-    int Ncomplex = Nmodes * Nmodes * batch_size;
+    const int Ncomplex = Nmodes * Nmodes * contractions;
 
     deviceVector<ComplexD> A(Ncomplex); // input vectors
     deviceVector<ComplexD> C(Ncomplex); // result of matrix operations on device
@@ -254,22 +257,21 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // Input mesonfield Mpp(i, j, k, l)
     // use Mpp.data() to copy to device => Offset = i*(Nt*Nmodes*Nmodes) + j*(Nmodes*Nmodes) + k*(Nmodes) + l
 
-    acceleratorCopyToDevice(MesonField.data(), &A[Nmodes * Nmodes * batch_size], Nmodes * Nmodes * batch_size * sizeof(ComplexD))
+    acceleratorCopyToDevice(MesonField.data(), &A[Nmodes * Nmodes * batch_size], Nmodes * Nmodes * contractions * sizeof(ComplexD))
 
-    deviceVector<ComplexD* > As(batch_size);
+    deviceVector<ComplexD* > As(contractions);
     // Same matrices as in As but in the order necessary for the contraction
-    deviceVector<ComplexD* > Bs(batch_size);
-    deviceVector<ComplexD* > Cs(batch_size);
+    deviceVector<ComplexD* > Bs(contractions);
+    deviceVector<ComplexD* > Cs(contractions);
 
     // vector of which matrices to contract
-    // vector<int> B_mesonfields = (back-to-back momenta evaluated at tsrc and tsrc + Delta, to be combined later);
 
-    for(int b=0; b<batch_size; b++) {
+    for(int b=0; b<contractions; b++) {
       ComplexD *ptr;
       ptr = &A[b * Nmodes * Nmodes];
       acceleratorPut(As[b], ptr);
-      \\ this is where I need the contractions necessary to craft the appropriate B vector
-      ptr = &A[B_mesonfields[b] * Nmodes * Nmodes]
+      // this is where I need the contractions necessary to craft the appropriate B vector
+      ptr = &A[time_mom_contractions[b] * Nmodes * Nmodes]
       acceleratorPut(Bs[b], ptr);
     }
     ComplexD alpha(1.0);
@@ -296,7 +298,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "COPYING RESULTS TO HOST" << endl;
 
     //Eigen::Tensor<ComplexD,4, Eigen::RowMajor> c(momenta.size(),Nt,Nmodes,Nmodes);
-    acceleratorCopyFromDevice(&C, Result.data(), Nmodes * Nmodes * sizeof(ComplexD) * batch_size);
+    acceleratorCopyFromDevice(&C, Result.data(), Nmodes * Nmodes * sizeof(ComplexD) * contractions);
 };
 
 
@@ -307,7 +309,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
                                                             TensorType_TraceMomTime &Result,
-                                                            vector<vector<int> > &time_mom_contractions) 
+                                                            vector<int> &time_mom_contractions) 
  
 {
     const int block=A2Ablocking;
@@ -316,9 +318,9 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     typedef typename vobj::vector_type vector_type;
  
 
-    int num_momenta = Mesonfield.dimension(0);
-    int timeslices  = Mesonfield.dimension(2);
-    int Nmodes = Mesonfield.dimension(3);
+    const int num_momenta = Mesonfield.dimension(0);
+    const int timeslices  = Mesonfield.dimension(2);
+    const int Nmodes = Mesonfield.dimension(3);
 
     // make sure mesonfield is what I expect
     GRID_ASSERT(Nmodes == Mesonfield.dimension(4));
@@ -329,15 +331,16 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // Perlmutter A100 has 40GB memory => 300 matrices = ~ 32 GB with 8GB for system
   
     const int max_batch_size = 100;
-    int batch_size = 50; // to start
+    const int contractions = time_mom_contractions.size();
+    //int batch_size = 50; // to start
 
     // total number of matrices
     // timeslices * num_momenta * 2 mom orientations
     // ex: 24^3 x 64 ensemble: 64 * 4 * 2 = 312 pion mesonfields per config
 
     // set up memory on device
-    int Ncomplex = Nmodes * Nmodes * batch_size;
-  
+    const int Ncomplex = Nmodes * Nmodes * contractions;
+
     deviceVector<ComplexD> A(Ncomplex); // input vectors
     deviceVector<ComplexD> C(Ncomplex); // result of matrix operations on device
 
@@ -347,23 +350,22 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // Input mesonfield Mpp(i, j, k, l)
     // use Mpp.data() to copy to device => Offset = i*(Nt*Nmodes*Nmodes) + j*(Nmodes*Nmodes) + k*(Nmodes) + l 
 
-    acceleratorCopyToDevice(MesonField.data(), &A[Nmodes * Nmodes * batch_size], Nmodes * Nmodes * batch_size * sizeof(ComplexD))
+    acceleratorCopyToDevice(MesonField.data(), &A[Nmodes * Nmodes * batch_size], Nmodes * Nmodes * contractions * sizeof(ComplexD))
 
-    deviceVector<ComplexD* > As(batch_size);
+    deviceVector<ComplexD* > As(contractions);
     // Same matrices as in As but in the order necessary for the contraction
-    deviceVector<ComplexD* > Bs(batch_size);
-    deviceVector<ComplexD* > Cs(batch_size);
+    deviceVector<ComplexD* > Bs(contractions);
+    deviceVector<ComplexD* > Cs(contractions);
 
     // vector of which matrices to contract
-    // vector<int> B_mesonfields = smth;
 
-    for(int b=0; b<batch_size; b++) {
+    for(int b=0; b<contractions; b++) {
       ComplexD *ptr;
       ptr = &A[b * Nmodes * Nmodes];
       acceleratorPut(As[b], ptr);
-      \\ this is where I need the contractions necessary to craft the appropriate B vector
-      ptr = &A[B_mesonfields[b] * Nmodes * Nmodes]
-      acceleratorPut(Bs[b], ptr);      
+      // this is where I need the contractions necessary to craft the appropriate B vector
+      ptr = &A[time_mom_contractions[b] * Nmodes * Nmodes]
+      acceleratorPut(Bs[b], ptr);
     }
 
     ComplexD alpha(1.0);
@@ -380,7 +382,6 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
 };
 
-\\\\\ NOTES TODO \\\\\\
 
 
 
