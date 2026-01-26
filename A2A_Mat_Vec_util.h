@@ -276,6 +276,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
       // this is where I need the contractions necessary to craft the appropriate B vector
       ptr = &A[time_mom_contractions[b] * Nmodes * Nmodes];
       acceleratorPut(Bs[b], ptr);
+      ptr = &C[b* Nmodes * Nmodes];
+      acceleratorPut(Cs[b], ptr);
     }
     ComplexD alpha(1.0);
     ComplexD beta(0.0);
@@ -301,7 +303,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "COPYING RESULTS TO HOST" << endl;
 
     //Eigen::Tensor<ComplexD,4, Eigen::RowMajor> c(momenta.size(),Nt,Nmodes,Nmodes);
-    acceleratorCopyFromDevice(&C, Result.data(), Nmodes * Nmodes * sizeof(ComplexD) * contractions);
+    acceleratorCopyFromDevice(&C[0], Result.data(), Nmodes * Nmodes * sizeof(ComplexD) * contractions);
 };
 
 
