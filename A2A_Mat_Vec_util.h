@@ -75,8 +75,9 @@ public:
 // Eigen::Tensor<ComplexD,4, Eigen::RowMajor> Mpp(momenta.size(),Nt,Nmodes,Nmodes);
 
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
-  static void TraceMesonFields(TensorType_mesonfield &Mesonfield,
-                               TensorType_TraceMomTime &Result);
+  static void MesonField_MesonField(TensorType_mesonfield &Mesonfield,
+                               TensorType_TraceMomTime &Result,
+                               vector<vector<int> > &time_mom_contractions);
 
 
 
@@ -208,9 +209,11 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
   template<class FImpl>
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
-  void PipiA2Autils<FImpl>::TraceMesonFields(TensorType_mesonfield &Mesonfield,
-                                             TensorType_TraceMomTime &Result) 
- {
+  void PipiA2Autils<FImpl>::MesonField_MesonField(TensorType_mesonfield &Mesonfield,
+                                             TensorType_TraceMomTime &Result,
+                                             vector<vector<int> > &time_mom_contractions) 
+ 
+{
     const int block=A2Ablocking;
     typedef typename vobj::scalar_object sobj;
     typedef typename vobj::scalar_type scalar_type;
@@ -233,8 +236,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     int batch_size = 50; // to start
 
     // total number of matrices
-    // timeslices * num_momenta 
-    // ex: 24^3 x 64 ensemble: 64 * 4 = 156 pion mesonfields per config
+    // timeslices * num_momenta * 2 mom orientations
+    // ex: 24^3 x 64 ensemble: 64 * 4 * 2 = 312 pion mesonfields per config
 
     // set up memory on device
     int Ncomplex = Nmodes * Nmodes * batch_size;
@@ -248,12 +251,40 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // Input mesonfield Mpp(i, j, k, l)
     // use Mpp.data() to copy to device => Offset = i*(Nt*Nmodes*Nmodes) + j*(Nmodes*Nmodes) + k*(Nmodes) + l 
 
-//    for(int i=0; i<batch_size; i++) {
-//      auto a = Mesonfield
-//      acceleratorCopyToDevice()
-//    }
+    acceleratorCopyToDevice(MesonField.data(), &A[Nmodes * Nmodes * batch_size], Nmodes * Nmodes * batch_size * sizeof(ComplexD))
+
+    deviceVector<ComplexD* > As(batch_size);
+    // Same matrices as in As but in the order necessary for the contraction
+    deviceVector<ComplexD* > Bs(batch_size);
+    deviceVector<ComplexD* > Cs(batch_size);
+
+    // vector of which matrices to contract
+    // vector<int> B_mesonfields = smth;
+
+    for(int b=0; b<batch_size; b++) {
+      ComplexD *ptr;
+      ptr = &A[b * Nmodes * Nmodes];
+      acceleratorPut(As[b], ptr);
+      \\ this is where I need the contractions necessary to craft the appropriate B vector
+      ptr = &A[B_mesonfields[b] * Nmodes * Nmodes]
+      acceleratorPut(Bs[b], ptr);      
+    }
+
+    ComplexD alpha(1.0);
+    ComplexD beta(0.0);
+
+    // perform the matrix multiplication
+    gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As, Bs, beta, Cs);
+
+  
+    // set up next stage of the multiplication (if true) for the disconnected piece, I can just do one then write out the results
+
+
+
 
 };
+
+\\\\\ NOTES TODO \\\\\\
 
 
 
