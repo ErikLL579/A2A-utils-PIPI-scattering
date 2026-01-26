@@ -288,6 +288,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // perform the matrix multiplication
     // (check that the matrices are transposed correctly)
     blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As, Bs, beta, Cs);
+    blas.synchronise();
 
     RealD t1 = usecond();
     flops = flops / (t1 - t0) / 1.e3;
@@ -295,7 +296,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "=================================================== " << endl;
     cout << GridLogMessage << "=================================================== " << endl;
     cout << GridLogMessage << "TOTAL TIME BATCHED GEMM = " << (t1 - t0) / 1.e3 << endl;
-    cout << GridLogMessage << "FLOPS = "  <<  flops << endl; 
+    cout << GridLogMessage << "FLOPS = "  <<  flops << " Gflop/s" <<  endl; 
     cout << GridLogMessage << "=================================================== " << endl;
     cout << GridLogMessage << "=================================================== " << endl;
 
