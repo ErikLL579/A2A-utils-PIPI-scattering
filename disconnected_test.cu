@@ -43,20 +43,17 @@ int main(int argc, char *argv[])
   //M_test.setRandom();
   //M_test.setZero();
 
-  //template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
-  //static void MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
-  //                                            TensorType_TraceMomTime &Result,
-  //                                            vector<vector<int> > &time_mom_contractions);
-
-
   vector<int> contractions;
   for(int h=0; h<moms*times; h++) contractions.push_back(h);
 
-  PipiA2Autils<WilsonImplR>::MesonField_MesonField_disconnected(M_test, Results, contractions);
+  PipiA2Autils<WilsonImplR>::MesonField_MesonField_disconnected(M_test, Results, contractions, contractions, contractions);
 
 
   cout<< GridLogMessage << "=============== TEST RESULST MATRIX =================" <<endl;
   cout<< GridLogMessage << "COMPONENT (25, 2400, 2300) =  " << Results(25, 2400, 2300) << endl;
+  cout<< GridLogMessage << "COMPONENT (50, 34, 2322) =  " << Results(50, 34, 2322) << endl;
+  cout<< GridLogMessage << "COMPONENT (13, 13, 13) =  " << Results(13, 13, 13) << endl;
+  cout<< GridLogMessage << "=====================================================" <<endl;
 
   // epilogue
   std::cout << GridLogMessage << "Grid is finalizing now" << std::endl;

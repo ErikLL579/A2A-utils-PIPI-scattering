@@ -78,13 +78,17 @@ public:
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
                                               TensorType_TraceMomTime &Result,
-                                              vector<int> &time_mom_contractions);
+                                              vector<int> &A_vector_contractions,
+                                              vector<int> &B_vector_contractions,
+                                              vector<int> &C_vector_contractions);
 
 
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
                                               TensorType_TraceMomTime &Result,
-                                              vector<int> &time_mom_contractions);
+                                              vector<int> &A_vector_contractions,
+                                              vector<int> &B_vector_contractions,
+                                              vector<int> &C_vector_contractions); 
 
 
 
@@ -218,7 +222,9 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
                                                             TensorType_TraceMomTime &Result,
-                                                            vector<int> &time_mom_contractions)
+                                                            vector<int> &A_vector_contractions,
+                                                            vector<int> &B_vector_contractions,
+                                                            vector<int> &C_vector_contractions)
 {
     const int block=A2Ablocking;
     typedef typename vobj::scalar_object sobj;
@@ -239,8 +245,11 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // Perlmutter A100 has 40GB memory => 300 matrices = ~ 32 GB with 8GB for system
 
     const int max_batch_size = 100;
-    const int contractions = time_mom_contractions.size();
+    const int contractions = A_vector_contractions.size();
 
+    // check that contraction vector are the same size
+    GRID_ASSERT(contractions = B_vector_contractions.size());
+    GRID_ASSERT(contractions = C_vector_contractions.size());
     GRID_ASSERT(contractions < max_batch_size);
 
     // total number of matrices
@@ -271,14 +280,21 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
     for(int b=0; b<contractions; b++) {
       ComplexD *ptr;
-      ptr = &A[b * Nmodes * Nmodes];
+      
+      // this needs to be modified in the case that I want to use matrices more than once (which I do)
+      // probably need another vector to organize these 
+      ptr = &A[A_vector_contractions[b] * Nmodes * Nmodes];
       acceleratorPut(As[b], ptr);
+      
+
       // this is where I need the contractions necessary to craft the appropriate B vector
-      ptr = &A[time_mom_contractions[b] * Nmodes * Nmodes];
+      ptr = &A[B_vector_contractions[b] * Nmodes * Nmodes];
       acceleratorPut(Bs[b], ptr);
-      ptr = &C[b* Nmodes * Nmodes];
+
+      ptr = &C[C_vector_contractions[b] * Nmodes * Nmodes];
       acceleratorPut(Cs[b], ptr);
     }
+
     ComplexD alpha(1.0);
     ComplexD beta(0.0);
     RealD flops = 8.0 * Nmodes * Nmodes * Nmodes * contractions;
@@ -315,7 +331,9 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
                                                             TensorType_TraceMomTime &Result,
-                                                            vector<int> &time_mom_contractions) 
+                                                            vector<int> &A_vector_contractions,
+                                                            vector<int> &B_vector_contractions,
+                                                            vector<int> &C_vector_contractions)
  
 {
     const int block=A2Ablocking;
@@ -338,8 +356,13 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // Perlmutter A100 has 40GB memory => 300 matrices = ~ 32 GB with 8GB for system
   
     const int max_batch_size = 100;
-    const int contractions = time_mom_contractions.size();
-    //int batch_size = 50; // to start
+    const int contractions = A_vector_contractions.size();
+      
+    // check that contraction vector are the same size
+    GRID_ASSERT(contractions = B_vector_contractions.size());
+    GRID_ASSERT(contractions = C_vector_contractions.size());
+    GRID_ASSERT(contractions < max_batch_size);
+    
 
     // total number of matrices
     // timeslices * num_momenta * 2 mom orientations
@@ -371,7 +394,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
       ptr = &A[b * Nmodes * Nmodes];
       acceleratorPut(As[b], ptr);
       // this is where I need the contractions necessary to craft the appropriate B vector
-      ptr = &A[time_mom_contractions[b] * Nmodes * Nmodes];
+      ptr = &A[B_vector_contractions[b] * Nmodes * Nmodes];
       acceleratorPut(Bs[b], ptr);
     }
 
