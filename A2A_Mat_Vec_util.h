@@ -425,8 +425,27 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "=================================================== " << endl;
     cout << GridLogMessage << "=================================================== " << endl;
 
+    // ======================================================================================================
     // cant use same ptr for two arguments: blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, Cs, Bs, beta, Cs);
     // will have to istead mix up the ones that are fed into the arguments
+    // ======================================================================================================
+ 
+    RealD t0 = usecond();
+    
+    // (rotated arguments here for illustration)
+    // (check that the matrices are transposed correctly)
+    blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, Cs, As, beta, Bs);
+    blas.synchronise();
+    
+    RealD t1 = usecond();
+    flops = flops / (t1 - t0) / 1.e3;
+
+    cout << GridLogMessage << "=================================================== " << endl;
+    cout << GridLogMessage << "=================================================== " << endl;
+    cout << GridLogMessage << "TOTAL TIME BATCHED GEMM = " << (t1 - t0) / 1.e3 << endl;
+    cout << GridLogMessage << "FLOPS = "  <<  flops << " Gflop/s" <<  endl;
+    cout << GridLogMessage << "=================================================== " << endl;
+    cout << GridLogMessage << "=================================================== " << endl;
 
 
     // write out the DC pieces for use in zeroth order diagrams and EM corrections to DC diagram
