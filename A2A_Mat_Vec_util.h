@@ -218,7 +218,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 };
 
 
-   template<class FImpl>
+  template<class FImpl>
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
                                                             TensorType_TraceMomTime &Result,
@@ -335,84 +335,106 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
                                                             vector<int> &B_vector_contractions,
                                                             vector<int> &C_vector_contractions)
  
-{
     const int block=A2Ablocking;
     typedef typename vobj::scalar_object sobj;
     typedef typename vobj::scalar_type scalar_type;
     typedef typename vobj::vector_type vector_type;
-
-    GridBLAS blas; 
-
-    const int num_momenta = Mesonfield.dimension(0);
-    const int timeslices  = Mesonfield.dimension(2);
-    const int Nmodes = Mesonfield.dimension(3);
-
-    // make sure mesonfield is what I expect
-    GRID_ASSERT(Nmodes == Mesonfield.dimension(4));
-  
-  
+    
+    GridBLAS blas;
+    
+    int num_momenta = Mesonfield.dimension(0);
+    int timeslices  = Mesonfield.dimension(1);
+    int Nmodes = Mesonfield.dimension(2);
+    
+    // make sure mesonfield is what I expect  
+    GRID_ASSERT(Nmodes == Mesonfield.dimension(3));
+    
     // need to write something to determine batch size based on available device memory
     // ex single Meson field: 2700 * 2700 * 16 ~ 11MB
     // Perlmutter A100 has 40GB memory => 300 matrices = ~ 32 GB with 8GB for system
-  
+      
     const int max_batch_size = 100;
     const int contractions = A_vector_contractions.size();
-      
+     
     // check that contraction vector are the same size
     GRID_ASSERT(contractions = B_vector_contractions.size());
     GRID_ASSERT(contractions = C_vector_contractions.size());
     GRID_ASSERT(contractions < max_batch_size);
-    
-
+      
     // total number of matrices
     // timeslices * num_momenta * 2 mom orientations
     // ex: 24^3 x 64 ensemble: 64 * 4 * 2 = 312 pion mesonfields per config
-
+  
     // set up memory on device
     const int Ncomplex = Nmodes * Nmodes * contractions;
-
+                                                            
     deviceVector<ComplexD> A(Ncomplex); // input vectors
     deviceVector<ComplexD> C(Ncomplex); // result of matrix operations on device
-
+    
     // need to parse the input Eigen matrix appropriately
-    // also only computing at tsrc = 0,8,... , so this avoids the 'double calculating' part I was worried about on connected diagrams.o
-
+    // compute DC pieces at all tsrc
+    
     // Input mesonfield Mpp(i, j, k, l)
-    // use Mpp.data() to copy to device => Offset = i*(Nt*Nmodes*Nmodes) + j*(Nmodes*Nmodes) + k*(Nmodes) + l 
-
-    acceleratorCopyToDevice(Mesonfield.data(), &A[Nmodes * Nmodes * contractions], Nmodes * Nmodes * contractions * sizeof(ComplexD));
-
+    // use Mpp.data() to copy to device => Offset = i*(Nt*Nmodes*Nmodes) + j*(Nmodes*Nmodes) + k*(Nmodes) + l
+    
+    // need to only upload enough A fields to actually fill this out...
+    acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * contractions * sizeof(ComplexD));
+    
     deviceVector<ComplexD* > As(contractions);
     // Same matrices as in As but in the order necessary for the contraction
     deviceVector<ComplexD* > Bs(contractions);
     deviceVector<ComplexD* > Cs(contractions);
 
-    // vector of which matrices to contract
-
-    for(int b=0; b<contractions; b++) {
+ // vector of which matrices to contract
+  
+    for(int b=0; b<contractions; b++) {  
       ComplexD *ptr;
-      ptr = &A[b * Nmodes * Nmodes];
-      acceleratorPut(As[b], ptr);
+    
+      // this needs to be modified in the case that I want to use matrices more than once (which I do)
+      // probably need another vector to organize these
+      ptr = &A[A_vector_contractions[b] * Nmodes * Nmodes];
+      acceleratorPut(As[b], ptr);             
+  
+                                              
       // this is where I need the contractions necessary to craft the appropriate B vector
       ptr = &A[B_vector_contractions[b] * Nmodes * Nmodes];
       acceleratorPut(Bs[b], ptr);
+                                                            
+      ptr = &C[C_vector_contractions[b] * Nmodes * Nmodes];
+      acceleratorPut(Cs[b], ptr);
     }
-
+                                              
     ComplexD alpha(1.0);
     ComplexD beta(0.0);
-
+    RealD flops = 8.0 * Nmodes * Nmodes * Nmodes * contractions;
+    
+    RealD t0 = usecond();
+    
     // perform the matrix multiplication
+    // (check that the matrices are transposed correctly)
     blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As, Bs, beta, Cs);
-
+    blas.synchronise();
   
-    // set up next stage of the multiplication (if true) for the disconnected piece, I can just do one then write out the results
+    RealD t1 = usecond();
+    flops = flops / (t1 - t0) / 1.e3;
+
+    cout << GridLogMessage << "=================================================== " << endl;
+    cout << GridLogMessage << "=================================================== " << endl;
+    cout << GridLogMessage << "TOTAL TIME BATCHED GEMM = " << (t1 - t0) / 1.e3 << endl;
+    cout << GridLogMessage << "FLOPS = "  <<  flops << " Gflop/s" <<  endl;
+    cout << GridLogMessage << "=================================================== " << endl;
+    cout << GridLogMessage << "=================================================== " << endl;
+
+    // cant use same ptr for two arguments: blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, Cs, Bs, beta, Cs);
+    // will have to istead mix up the ones that are fed into the arguments
 
 
-
-
+    // write out the DC pieces for use in zeroth order diagrams and EM corrections to DC diagram
+    cout << GridLogMessage << "COPYING RESULTS TO HOST" << endl;
+    
+    //Eigen::Tensor<ComplexD,4, Eigen::RowMajor> c(momenta.size(),Nt,Nmodes,Nmodes);
+    acceleratorCopyFromDevice(&C[0], Result.data(), Nmodes * Nmodes * sizeof(ComplexD) * contractions);
 };
-
-
 
 
 
