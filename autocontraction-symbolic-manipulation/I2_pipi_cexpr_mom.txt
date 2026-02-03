@@ -1,27 +1,19 @@
 # Pion meson field form (momentum space)
 # Transformed from quark propagator form using A2A factorization
-# Pi(p, t) represents the momentum-projected pion meson field matrix
+# Pi(p, t) = momentum-projected pion meson field matrix
+# <w|gamma_mu|v>(z) = current vertex (summed over position z)
 # '.' denotes matrix multiplication (A2A index contraction)
 # Tr[...] denotes trace over A2A indices
 #
-# Momentum conventions (center-of-mass frame):
+# Momentum conventions:
 #   src_1 -> (p, t_src)
 #   src_2 -> (-p, t_src + Delta)
 #   snk_1 -> (k, t_snk)
 #   snk_2 -> (-k, t_snk + Delta)
+#   x_1, x_2 -> remain in position space (summed over)
 #
-# Coefficient definitions:
-coef_ADT1 = 1
-coef_ADT2 = 1
-
 # Term definitions:
 term_ADT1_0 = coef_ADT1 * Tr[Pi(k, t_snk) . Pi(p, t_src)] * Tr[Pi(-k, t_snk + Delta) . Pi(-p, t_src + Delta)]
 term_ADT1_1 = coef_ADT1 * Tr[Pi(k, t_snk) . Pi(-p, t_src + Delta)] * Tr[Pi(-k, t_snk + Delta) . Pi(p, t_src)]
 term_ADT2_0 = coef_ADT2 * Tr[Pi(k, t_snk) . Pi(p, t_src) . Pi(-k, t_snk + Delta) . Pi(-p, t_src + Delta)]
 term_ADT2_1 = coef_ADT2 * Tr[Pi(k, t_snk) . Pi(-p, t_src + Delta) . Pi(-k, t_snk + Delta) . Pi(p, t_src)]
-
-# Expression definitions:
-exprs[1] += +1*term_ADT1_0
-exprs[1] += -1*term_ADT2_0
-exprs[1] += +1*term_ADT1_1
-exprs[1] += -1*term_ADT2_1

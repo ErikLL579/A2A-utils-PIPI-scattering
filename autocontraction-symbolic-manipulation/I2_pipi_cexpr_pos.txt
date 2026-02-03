@@ -1,21 +1,12 @@
 # Pion meson field form (position space)
 # Transformed from quark propagator form using A2A factorization
-# Pi(x) represents the pion meson field matrix with implicit A2A indices
+# Pi(x) = pion meson field matrix
+# <w|gamma_mu|v>(z) = current vertex (summed over position z)
 # '.' denotes matrix multiplication (A2A index contraction)
 # Tr[...] denotes trace over A2A indices
 #
-# Coefficient definitions:
-coef_ADT1 = 1
-coef_ADT2 = 1
-
 # Term definitions:
 term_ADT1_0 = coef_ADT1 * Tr[Pi(snk_1) . Pi(src_1)] * Tr[Pi(snk_2) . Pi(src_2)]
 term_ADT1_1 = coef_ADT1 * Tr[Pi(snk_1) . Pi(src_2)] * Tr[Pi(snk_2) . Pi(src_1)]
 term_ADT2_0 = coef_ADT2 * Tr[Pi(snk_1) . Pi(src_1) . Pi(snk_2) . Pi(src_2)]
 term_ADT2_1 = coef_ADT2 * Tr[Pi(snk_1) . Pi(src_2) . Pi(snk_2) . Pi(src_1)]
-
-# Expression definitions:
-exprs[1] += +1*term_ADT1_0
-exprs[1] += -1*term_ADT2_0
-exprs[1] += +1*term_ADT1_1
-exprs[1] += -1*term_ADT2_1

@@ -2,20 +2,18 @@
 Transform Wick contraction expressions from quark propagator form to pion meson field form.
 
 This script parses autocontraction output files and transforms them using A2A factorization.
-Handles both standard pipi scattering and EM corrections with gamma_mu insertions.
 
 Usage:
     python transform_wick.py <input_file>
 
 Example:
     python transform_wick.py luchang-qlat-AC-output/I2_pipi_cexpr_original.txt
-    python transform_wick.py luchang-qlat-AC-output/I2_pipi_EM_cexpr_original.txt
 """
 
 import re
 import sys
-from dataclasses import dataclass, field
-from typing import List, Tuple, Dict, Optional, Union
+from dataclasses import dataclass
+from typing import List, Tuple, Dict, Optional
 
 
 # =============================================================================
@@ -37,60 +35,35 @@ class Propagator:
 
 
 @dataclass
-class GammaPropPair:
-    """
-    Represents a (gamma_matrix, propagator) pair in a trace.
-
-    The trace structure is: gamma * S * gamma * S * ...
-    Each pair represents the gamma that precedes the propagator.
-    """
-    gamma: str        # e.g., "gamma_5", "gamma_x", "gamma_y", etc.
-    propagator: Propagator
-
-    def __repr__(self):
-        return f"({self.gamma}, {self.propagator})"
-
-
-@dataclass
 class Trace:
     """
-    Represents a trace over spinor indices: tr(gamma * S * gamma * S * ...)
+    Represents a trace over spinor indices: tr(gamma_5 * S * gamma_5 * S * ...)
 
-    Contains a list of (gamma, propagator) pairs in order.
+    The propagators list contains the propagators in order as they appear in the trace.
+    Each propagator is sandwiched between gamma_5 matrices.
     """
-    pairs: List[GammaPropPair]
+    propagators: List[Propagator]
 
     def __repr__(self):
-        parts = []
-        for pair in self.pairs:
-            parts.append(f"{pair.gamma}*{pair.propagator}")
-        return f"tr({'*'.join(parts)})"
-
-    def get_gamma_types(self) -> List[str]:
-        """Return list of gamma matrix types in this trace."""
-        return [pair.gamma for pair in self.pairs]
-
-    def count_gamma_x(self) -> int:
-        """Count occurrences of gamma_x in this trace."""
-        return sum(1 for pair in self.pairs if pair.gamma == "gamma_x")
+        props = "*gamma_5*".join(str(p) for p in self.propagators)
+        return f"tr(gamma_5*{props})"
 
 
 @dataclass
 class Term:
     """
     Represents a term in the Wick contraction: coefficient * (product of traces).
+
+    For direct diagrams (ADT1): two separate traces multiplied together
+    For cross diagrams (ADT2): single trace with four propagators
     """
-    name: str              # e.g., "term_Type10_0"
-    coef_name: str         # e.g., "coef_Type10"
+    name: str              # e.g., "term_ADT1_0"
+    coef_name: str         # e.g., "coef_ADT1"
     traces: List[Trace]    # list of traces (product of traces)
 
     def __repr__(self):
         traces_str = "*".join(str(t) for t in self.traces)
         return f"{self.name} = {self.coef_name} * {traces_str}"
-
-    def count_gamma_x(self) -> int:
-        """Count total gamma_x occurrences across all traces."""
-        return sum(t.count_gamma_x() for t in self.traces)
 
 
 @dataclass
@@ -100,9 +73,9 @@ class MesonField:
 
     In A2A notation: Pi^{ij}(x) = <w^i(x)|gamma_5|v^j(x)>
     """
-    position: str
-    momentum: Optional[str] = None
-    time: Optional[str] = None
+    position: str              # position label like "snk_1" or "src_1"
+    momentum: Optional[str] = None   # momentum label like "p" or "-p"
+    time: Optional[str] = None       # time label like "t_src" or "t_src + delta_t"
 
     def to_position_str(self) -> str:
         return f"Pi({self.position})"
@@ -114,55 +87,23 @@ class MesonField:
 
 
 @dataclass
-class CurrentVertex:
-    """
-    Represents a current vertex <w^i|gamma_mu|v^j>(z).
-
-    This is NOT converted to a meson field - it remains as a vertex
-    for EM current insertions.
-    """
-    position: str      # position label like "x_1" or "x_2"
-    gamma: str         # gamma matrix type, e.g., "gamma_x"
-
-    def to_position_str(self) -> str:
-        # Convert gamma_x to gamma_mu or gamma_nu based on position
-        # x_1 (z_1) gets gamma_mu, x_2 (z_2) gets gamma_nu
-        if self.gamma == "gamma_x":
-            if self.position == "x_1":
-                gamma_out = "gamma_mu"
-            elif self.position == "x_2":
-                gamma_out = "gamma_nu"
-            else:
-                gamma_out = "gamma_mu"  # fallback
-        else:
-            gamma_out = self.gamma
-        return f"<w|{gamma_out}|v>({self.position})"
-
-    def to_momentum_str(self) -> str:
-        # Current vertices stay in position space (summed over)
-        return self.to_position_str()
-
-
-# Union type for chain elements
-ChainElement = Union[MesonField, CurrentVertex]
-
-
-@dataclass
 class MesonChain:
     """
-    Represents a chain of meson fields and/or current vertices with implicit A2A index contraction.
+    Represents a chain of meson fields with implicit A2A index contraction.
+
+    For example: Pi(snk_1) . Pi(src_1) means sum over shared A2A index.
     """
-    elements: List[ChainElement]
-    is_traced: bool = True
+    fields: List[MesonField]
+    is_traced: bool = False  # True if this is Tr[...] over A2A indices
 
     def to_position_str(self) -> str:
-        chain = " . ".join(e.to_position_str() for e in self.elements)
+        chain = " . ".join(f.to_position_str() for f in self.fields)
         if self.is_traced:
             return f"Tr[{chain}]"
         return f"({chain})"
 
     def to_momentum_str(self) -> str:
-        chain = " . ".join(e.to_momentum_str() for e in self.elements)
+        chain = " . ".join(f.to_momentum_str() for f in self.fields)
         if self.is_traced:
             return f"Tr[{chain}]"
         return f"({chain})"
@@ -175,7 +116,7 @@ class MesonTerm:
     """
     name: str
     coef_name: str
-    chains: List[MesonChain]
+    chains: List[MesonChain]  # product of meson chains
 
     def to_position_str(self) -> str:
         chains_str = " * ".join(c.to_position_str() for c in self.chains)
@@ -202,9 +143,8 @@ def parse_propagator(prop_str: str) -> Propagator:
 
 def parse_trace(trace_str: str) -> Trace:
     """
-    Parse a trace string into a Trace object with (gamma, propagator) pairs.
-
-    Example: 'tr(gamma_x*S_l(x_1,snk_1)*gamma_5*S_l(snk_1,x_2)*gamma_x*S_l(x_2,src_1)*gamma_5*S_l(src_1,x_1))'
+    Parse a trace string like 'tr(gamma_5*S_l(snk_1,src_1)*gamma_5*S_l(src_1,snk_1))'
+    into a Trace object.
     """
     # Extract content inside tr(...)
     match = re.match(r'tr\((.*)\)', trace_str)
@@ -213,21 +153,12 @@ def parse_trace(trace_str: str) -> Trace:
 
     content = match.group(1)
 
-    # Pattern to match gamma_* followed by *S_l(...)
-    # This handles: gamma_5, gamma_x, gamma_y, gamma_z, gamma_t
-    pattern = r'(gamma_[a-z0-9]+)\*S_l\((\w+),(\w+)\)'
+    # Find all propagators S_l(...) in the trace
+    prop_pattern = r'S_l\(\w+,\w+\)'
+    prop_matches = re.findall(prop_pattern, content)
 
-    pairs = []
-    for match in re.finditer(pattern, content):
-        gamma = match.group(1)
-        prop_start = match.group(2)
-        prop_end = match.group(3)
-        pairs.append(GammaPropPair(
-            gamma=gamma,
-            propagator=Propagator(start=prop_start, end=prop_end)
-        ))
-
-    return Trace(pairs=pairs)
+    propagators = [parse_propagator(p) for p in prop_matches]
+    return Trace(propagators=propagators)
 
 
 def find_matching_paren(s: str, start: int) -> int:
@@ -249,16 +180,20 @@ def parse_term_expression(expr_str: str) -> List[Trace]:
     """
     Parse the right-hand side of a term assignment (after the coefficient).
     Returns a list of Trace objects.
+
+    Example input: 'tr(...)*tr(...)' or just 'tr(...)'
     """
     traces = []
 
+    # Find all 'tr(' occurrences and extract full trace with nested parens
     i = 0
     while i < len(expr_str):
         idx = expr_str.find('tr(', i)
         if idx == -1:
             break
 
-        open_paren = idx + 2
+        # Find matching closing paren
+        open_paren = idx + 2  # position of '(' in 'tr('
         close_paren = find_matching_paren(expr_str, open_paren)
 
         if close_paren != -1:
@@ -271,13 +206,9 @@ def parse_term_expression(expr_str: str) -> List[Trace]:
     return traces
 
 
-def parse_input_file(filepath: str, filter_gamma_x: bool = False) -> Tuple[Dict[str, str], List[Term], Dict[str, List[Tuple[int, str]]]]:
+def parse_input_file(filepath: str) -> Tuple[Dict[str, str], List[Term], Dict[str, List[Tuple[int, str]]]]:
     """
     Parse the autocontraction output file.
-
-    Args:
-        filepath: path to input file
-        filter_gamma_x: if True, only keep terms with exactly 2 gamma_x matrices
 
     Returns:
         - diagram_types: dict mapping term prefixes to diagram type names
@@ -315,7 +246,7 @@ def parse_input_file(filepath: str, filter_gamma_x: bool = False) -> Tuple[Dict[
             term_index = term_match.group(3)
             rhs = term_match.group(4)
 
-            # Extract coefficient name
+            # Extract coefficient name (appears before the first 'tr' or at start)
             coef_match = re.match(r'(coef_\w+)\s*\*\s*(.+)', rhs)
             if coef_match:
                 coef_name = coef_match.group(1)
@@ -324,20 +255,13 @@ def parse_input_file(filepath: str, filter_gamma_x: bool = False) -> Tuple[Dict[
                 coef_name = f"coef_{diagram_type}"
                 expr_part = rhs
 
-            # Skip terms without traces
+            # Skip ADT0 terms (vacuum/normalization)
             if 'tr(' not in expr_part:
                 continue
 
             traces = parse_term_expression(expr_part)
             if traces:
-                term = Term(name=term_name, coef_name=coef_name, traces=traces)
-
-                # Filter for gamma_x if requested
-                if filter_gamma_x:
-                    if term.count_gamma_x() == 2:
-                        terms.append(term)
-                else:
-                    terms.append(term)
+                terms.append(Term(name=term_name, coef_name=coef_name, traces=traces))
             continue
 
         # Parse expression accumulations
@@ -362,30 +286,44 @@ def parse_input_file(filepath: str, filter_gamma_x: bool = False) -> Tuple[Dict[
 
 def transform_trace_to_meson_chain(trace: Trace) -> MesonChain:
     """
-    Transform a single spinor trace into a chain of meson fields and/or current vertices.
+    Transform a single spinor trace into a meson field chain.
 
-    For each (gamma, propagator) pair in the trace:
-    - The position is the 'start' of the propagator (where <w| and |v> meet)
-    - If gamma is gamma_5: create a MesonField Pi(position)
-    - If gamma is gamma_x (or other): create a CurrentVertex <w|gamma|v>(position)
+    For a trace Tr[gamma_5 * S(a,b) * gamma_5 * S(c,d) * ...]:
+    - Each propagator S(x,y) contributes to meson fields
+    - The positions where meson fields sit are determined by the propagator endpoints
+
+    Key insight from A2A factorization:
+    - S(x,y) = sum_i |v^i(x)><w^i(y)|
+    - After cyclic trace manipulation, we get products of Pi fields
+    - Pi^{ij}(x) = <w^i(x)|gamma_5|v^j(x)>
+
+    For Tr[gamma_5 * S(a,b) * gamma_5 * S(b,a)]:
+    -> Pi(a) . Pi(b)  (with implicit A2A index contraction)
     """
-    elements = []
+    # Extract the positions where meson fields will be located
+    # For each propagator S(start, end), the meson field sits at 'start'
 
-    for pair in trace.pairs:
-        position = pair.propagator.start
+    fields = []
+    for prop in trace.propagators:
+        fields.append(MesonField(position=prop.start))
 
-        if pair.gamma == "gamma_5":
-            elements.append(MesonField(position=position))
-        else:
-            # gamma_x, gamma_y, gamma_z, gamma_t -> current vertex
-            elements.append(CurrentVertex(position=position, gamma=pair.gamma))
+    # All meson chains require a trace over A2A indices
+    # - Direct diagram (2 propagators per spinor trace) -> Tr[Π · Π]
+    # - Cross diagram (4 propagators in single spinor trace) -> Tr[Π · Π · Π · Π]
+    is_traced = True
 
-    return MesonChain(elements=elements, is_traced=True)
+    return MesonChain(fields=fields, is_traced=is_traced)
 
 
 def transform_term(term: Term) -> MesonTerm:
     """
     Transform a Wick contraction term to meson field notation.
+
+    Direct diagram (2 separate spinor traces):
+        Tr[...] * Tr[...] -> (Pi . Pi) * (Pi . Pi)
+
+    Cross diagram (1 spinor trace with 4 propagators):
+        Tr[...] -> Tr[Pi . Pi . Pi . Pi]  (A2A trace)
     """
     chains = []
     for trace in term.traces:
@@ -399,9 +337,14 @@ def transform_term(term: Term) -> MesonTerm:
 # Momentum Space Conversion
 # =============================================================================
 
+# Position to momentum/time mapping for I=2 pipi scattering
+# Based on center-of-mass frame conventions from the reference paper
+# Sources have momenta p, -p; sinks have momenta k, -k
 MOMENTUM_MAP = {
+    # Source positions (x1, x2)
     "src_1": ("p", "t_src"),
     "src_2": ("-p", "t_src + Delta"),
+    # Sink positions (y1, y2)
     "snk_1": ("k", "t_snk"),
     "snk_2": ("-k", "t_snk + Delta"),
 }
@@ -410,27 +353,26 @@ MOMENTUM_MAP = {
 def apply_momentum_projection(meson_term: MesonTerm) -> MesonTerm:
     """
     Convert position-space meson fields to momentum space.
-    CurrentVertex elements remain in position space (they are summed over).
+
+    Uses center-of-mass frame conventions:
+    - p_src2 = -p_src1
+    - p_snk2 = -p_snk1
     """
     new_chains = []
 
     for chain in meson_term.chains:
-        new_elements = []
-        for elem in chain.elements:
-            if isinstance(elem, MesonField):
-                if elem.position in MOMENTUM_MAP:
-                    mom, time = MOMENTUM_MAP[elem.position]
-                    new_elements.append(MesonField(
-                        position=elem.position,
-                        momentum=mom,
-                        time=time
-                    ))
-                else:
-                    new_elements.append(elem)
+        new_fields = []
+        for field in chain.fields:
+            if field.position in MOMENTUM_MAP:
+                mom, time = MOMENTUM_MAP[field.position]
+                new_fields.append(MesonField(
+                    position=field.position,
+                    momentum=mom,
+                    time=time
+                ))
             else:
-                # CurrentVertex stays as is
-                new_elements.append(elem)
-        new_chains.append(MesonChain(elements=new_elements, is_traced=chain.is_traced))
+                new_fields.append(field)
+        new_chains.append(MesonChain(fields=new_fields, is_traced=chain.is_traced))
 
     return MesonTerm(name=meson_term.name, coef_name=meson_term.coef_name, chains=new_chains)
 
@@ -459,36 +401,62 @@ def generate_output(terms: List[Term],
     with open(output_pos_path, 'w') as f:
         f.write("# Pion meson field form (position space)\n")
         f.write("# Transformed from quark propagator form using A2A factorization\n")
-        f.write("# Pi(x) = pion meson field matrix\n")
-        f.write("# <w|gamma_mu|v>(z) = current vertex (summed over position z)\n")
+        f.write("# Pi(x) represents the pion meson field matrix with implicit A2A indices\n")
         f.write("# '.' denotes matrix multiplication (A2A index contraction)\n")
         f.write("# Tr[...] denotes trace over A2A indices\n")
         f.write("#\n")
+        f.write("# Coefficient definitions:\n")
+
+        # Write coefficient definitions
+        coef_names = sorted(set(t.coef_name for t in meson_terms_pos.values()))
+        for coef in coef_names:
+            f.write(f"{coef} = 1\n")
+        f.write("\n")
 
         f.write("# Term definitions:\n")
         for term_name in sorted(meson_terms_pos.keys()):
             f.write(meson_terms_pos[term_name].to_position_str() + "\n")
+        f.write("\n")
+
+        f.write("# Expression definitions:\n")
+        for expr_name, term_list in sorted(expressions.items()):
+            for coef, term_name in term_list:
+                if term_name in meson_terms_pos:
+                    sign = "+" if coef >= 0 else ""
+                    f.write(f"{expr_name} += {sign}{coef}*{term_name}\n")
 
     # Generate momentum-space output
     with open(output_mom_path, 'w') as f:
         f.write("# Pion meson field form (momentum space)\n")
         f.write("# Transformed from quark propagator form using A2A factorization\n")
-        f.write("# Pi(p, t) = momentum-projected pion meson field matrix\n")
-        f.write("# <w|gamma_mu|v>(z) = current vertex (summed over position z)\n")
+        f.write("# Pi(p, t) represents the momentum-projected pion meson field matrix\n")
         f.write("# '.' denotes matrix multiplication (A2A index contraction)\n")
         f.write("# Tr[...] denotes trace over A2A indices\n")
         f.write("#\n")
-        f.write("# Momentum conventions:\n")
+        f.write("# Momentum conventions (center-of-mass frame):\n")
         f.write("#   src_1 -> (p, t_src)\n")
         f.write("#   src_2 -> (-p, t_src + Delta)\n")
         f.write("#   snk_1 -> (k, t_snk)\n")
         f.write("#   snk_2 -> (-k, t_snk + Delta)\n")
-        f.write("#   x_1, x_2 -> remain in position space (summed over)\n")
         f.write("#\n")
+        f.write("# Coefficient definitions:\n")
+
+        # Write coefficient definitions
+        for coef in coef_names:
+            f.write(f"{coef} = 1\n")
+        f.write("\n")
 
         f.write("# Term definitions:\n")
         for term_name in sorted(meson_terms_mom.keys()):
             f.write(meson_terms_mom[term_name].to_momentum_str() + "\n")
+        f.write("\n")
+
+        f.write("# Expression definitions:\n")
+        for expr_name, term_list in sorted(expressions.items()):
+            for coef, term_name in term_list:
+                if term_name in meson_terms_mom:
+                    sign = "+" if coef >= 0 else ""
+                    f.write(f"{expr_name} += {sign}{coef}*{term_name}\n")
 
 
 # =============================================================================
@@ -497,33 +465,27 @@ def generate_output(terms: List[Term],
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python transform_wick.py <input_file> [--filter-gamma-x]")
+        print("Usage: python transform_wick.py <input_file>")
         print("Example: python transform_wick.py luchang-qlat-AC-output/I2_pipi_cexpr_original.txt")
-        print("         python transform_wick.py luchang-qlat-AC-output/I2_pipi_EM_cexpr_original.txt --filter-gamma-x")
         sys.exit(1)
 
     input_path = sys.argv[1]
-    filter_gamma_x = "--filter-gamma-x" in sys.argv
 
     # Derive output paths from input path
     base_name = input_path.replace('_original.txt', '').replace('.txt', '')
     if '/' in base_name:
+        # Keep just the filename part for output
         base_name = base_name.split('/')[-1]
 
     output_pos_path = f"{base_name}_pos.txt"
     output_mom_path = f"{base_name}_mom.txt"
 
     print(f"Parsing input file: {input_path}")
-    if filter_gamma_x:
-        print("Filtering for terms with exactly 2 gamma_x matrices")
-
-    diagram_types, terms, expressions = parse_input_file(input_path, filter_gamma_x=filter_gamma_x)
+    diagram_types, terms, expressions = parse_input_file(input_path)
 
     print(f"Found {len(terms)} terms")
-    if len(terms) <= 20:
-        for term in terms:
-            gamma_count = term.count_gamma_x()
-            print(f"  {term.name}: {len(term.traces)} trace(s), {gamma_count} gamma_x")
+    for term in terms:
+        print(f"  {term.name}: {len(term.traces)} trace(s)")
 
     print(f"\nGenerating output files:")
     print(f"  Position space: {output_pos_path}")
