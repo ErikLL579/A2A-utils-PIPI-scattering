@@ -1,0 +1,34 @@
+# Optimized pion meson field form (momentum space)
+# <w|gamma_X|v>(pos) split into <w|(pos) and gamma_X |v>(pos)
+# '.' denotes matrix multiplication (A2A index contraction)
+# Tr[...] denotes trace over A2A indices
+#
+# Optimization order (compute in this order):
+#   1. prod_Pi products  — matrix-matrix (Pi chain) products (cheap)
+#   2. prod_vec products — vector-matrix products involving <w| and |v> (expensive)
+#   3. Term assembly     — combine products into final traces
+#
+# Momentum conventions:
+#   src_1 -> (p, t_src)
+#   src_2 -> (-p, t_src + Delta)
+#   snk_1 -> (k, t_snk)
+#   snk_2 -> (-k, t_snk + Delta)
+#   x_1, x_2 -> remain in position space (summed over)
+#
+# =========================================================
+# Phase 1: Matrix-matrix products (Pi field chains)
+# =========================================================
+#
+# Level 1:
+prod_Pi1 = Pi(-k, t_snk + Delta) . Pi(-p, t_src + Delta)    # appears 2 times
+prod_Pi2 = Pi(-k, t_snk + Delta) . Pi(p, t_src)    # appears 2 times
+prod_Pi3 = Pi(k, t_snk) . Pi(-p, t_src + Delta)    # appears 2 times
+prod_Pi4 = Pi(k, t_snk) . Pi(p, t_src)    # appears 2 times
+
+# =========================================================
+# Phase 3: Term assembly
+# =========================================================
+term_ADT1_0 = coef_ADT1 * Tr[prod_Pi4] * Tr[prod_Pi1]
+term_ADT1_1 = coef_ADT1 * Tr[prod_Pi3] * Tr[prod_Pi2]
+term_ADT2_0 = coef_ADT2 * Tr[prod_Pi4 . prod_Pi1]
+term_ADT2_1 = coef_ADT2 * Tr[prod_Pi3 . prod_Pi2]

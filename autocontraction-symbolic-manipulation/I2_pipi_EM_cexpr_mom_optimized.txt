@@ -1,0 +1,202 @@
+# Optimized pion meson field form (momentum space)
+# <w|gamma_X|v>(pos) split into <w|(pos) and gamma_X |v>(pos)
+# '.' denotes matrix multiplication (A2A index contraction)
+# Tr[...] denotes trace over A2A indices
+#
+# Optimization order (compute in this order):
+#   1. prod_Pi products  — matrix-matrix (Pi chain) products (cheap, position-free)
+#   2. prod_vec products — vector-matrix products (expensive, position-local)
+#      Products carry their position: prod_vecN(x_1) lives at x_1
+#      Products at different positions are NEVER combined
+#   3. Term assembly     — combine products into final traces
+#
+# Momentum conventions:
+#   src_1 -> (p, t_src)
+#   src_2 -> (-p, t_src + Delta)
+#   snk_1 -> (k, t_snk)
+#   snk_2 -> (-k, t_snk + Delta)
+#   x_1, x_2 -> remain in position space (summed over)
+#
+# =========================================================
+# Phase 1: Matrix-matrix products (Pi field chains)
+# =========================================================
+#
+# Level 1:
+prod_Pi1 = Pi(-k, t_snk + Delta) . Pi(-p, t_src + Delta)    # appears 24 times
+prod_Pi2 = Pi(-k, t_snk + Delta) . Pi(p, t_src)    # appears 24 times
+prod_Pi3 = Pi(-p, t_src + Delta) . Pi(-k, t_snk + Delta)    # appears 18 times
+prod_Pi4 = Pi(-p, t_src + Delta) . Pi(k, t_snk)    # appears 18 times
+prod_Pi5 = Pi(k, t_snk) . Pi(-p, t_src + Delta)    # appears 24 times
+prod_Pi6 = Pi(k, t_snk) . Pi(p, t_src)    # appears 24 times
+prod_Pi7 = Pi(p, t_src) . Pi(-k, t_snk + Delta)    # appears 18 times
+prod_Pi8 = Pi(p, t_src) . Pi(k, t_snk)    # appears 18 times
+#
+# Level 2:
+prod_Pi9 = prod_Pi1 . Pi(k, t_snk)    # appears 2 times
+prod_Pi10 = prod_Pi1 . prod_Pi6    # appears 2 times
+prod_Pi11 = prod_Pi2 . Pi(k, t_snk)    # appears 2 times
+prod_Pi12 = prod_Pi2 . prod_Pi5    # appears 2 times
+prod_Pi13 = prod_Pi3 . Pi(p, t_src)    # appears 2 times
+prod_Pi14 = prod_Pi3 . prod_Pi8    # appears 2 times
+prod_Pi15 = prod_Pi4 . Pi(p, t_src)    # appears 2 times
+prod_Pi16 = prod_Pi4 . prod_Pi7    # appears 2 times
+prod_Pi17 = prod_Pi5 . Pi(-k, t_snk + Delta)    # appears 2 times
+prod_Pi18 = prod_Pi5 . prod_Pi2    # appears 2 times
+prod_Pi19 = prod_Pi6 . Pi(-k, t_snk + Delta)    # appears 2 times
+prod_Pi20 = prod_Pi6 . prod_Pi1    # appears 2 times
+prod_Pi21 = prod_Pi7 . Pi(-p, t_src + Delta)    # appears 2 times
+prod_Pi22 = prod_Pi7 . prod_Pi4    # appears 2 times
+prod_Pi23 = prod_Pi8 . Pi(-p, t_src + Delta)    # appears 2 times
+prod_Pi24 = prod_Pi8 . prod_Pi3    # appears 2 times
+
+# =========================================================
+# Phase 2: Vector-matrix products (position-local)
+# =========================================================
+#
+# Level 1:
+prod_vec1(x_2) = Pi(-k, t_snk + Delta) . <w|(x_2)    # appears 4 times
+prod_vec2(x_2) = Pi(-p, t_src + Delta) . <w|(x_2)    # appears 4 times
+prod_vec3(x_2) = Pi(k, t_snk) . <w|(x_2)    # appears 4 times
+prod_vec4(x_2) = Pi(p, t_src) . <w|(x_2)    # appears 4 times
+prod_vec5(x_1) = gamma_mu |v>(x_1) . Pi(-k, t_snk + Delta)    # appears 4 times
+prod_vec6(x_1) = gamma_mu |v>(x_1) . Pi(-p, t_src + Delta)    # appears 4 times
+prod_vec7(x_1) = gamma_mu |v>(x_1) . Pi(k, t_snk)    # appears 4 times
+prod_vec8(x_1) = gamma_mu |v>(x_1) . Pi(p, t_src)    # appears 4 times
+prod_vec9(x_1) = gamma_mu |v>(x_1) . prod_Pi1    # appears 4 times
+prod_vec10(x_1) = gamma_mu |v>(x_1) . prod_Pi2    # appears 4 times
+prod_vec11(x_1) = gamma_mu |v>(x_1) . prod_Pi3    # appears 4 times
+prod_vec12(x_1) = gamma_mu |v>(x_1) . prod_Pi4    # appears 4 times
+prod_vec13(x_1) = gamma_mu |v>(x_1) . prod_Pi5    # appears 4 times
+prod_vec14(x_1) = gamma_mu |v>(x_1) . prod_Pi6    # appears 4 times
+prod_vec15(x_1) = gamma_mu |v>(x_1) . prod_Pi7    # appears 4 times
+prod_vec16(x_1) = gamma_mu |v>(x_1) . prod_Pi8    # appears 4 times
+prod_vec17(x_2) = gamma_nu |v>(x_2) . Pi(-k, t_snk + Delta)    # appears 4 times
+prod_vec18(x_2) = gamma_nu |v>(x_2) . Pi(-p, t_src + Delta)    # appears 4 times
+prod_vec19(x_2) = gamma_nu |v>(x_2) . Pi(k, t_snk)    # appears 4 times
+prod_vec20(x_2) = gamma_nu |v>(x_2) . Pi(p, t_src)    # appears 4 times
+prod_vec21(x_2) = gamma_nu |v>(x_2) . prod_Pi1    # appears 4 times
+prod_vec22(x_2) = gamma_nu |v>(x_2) . prod_Pi2    # appears 4 times
+prod_vec23(x_2) = gamma_nu |v>(x_2) . prod_Pi3    # appears 4 times
+prod_vec24(x_2) = gamma_nu |v>(x_2) . prod_Pi4    # appears 4 times
+prod_vec25(x_2) = gamma_nu |v>(x_2) . prod_Pi5    # appears 4 times
+prod_vec26(x_2) = gamma_nu |v>(x_2) . prod_Pi6    # appears 4 times
+prod_vec27(x_2) = gamma_nu |v>(x_2) . prod_Pi7    # appears 4 times
+prod_vec28(x_2) = gamma_nu |v>(x_2) . prod_Pi8    # appears 4 times
+prod_vec29(x_2) = prod_Pi1 . <w|(x_2)    # appears 2 times
+prod_vec30(x_2) = prod_Pi2 . <w|(x_2)    # appears 2 times
+prod_vec31(x_2) = prod_Pi3 . <w|(x_2)    # appears 2 times
+prod_vec32(x_2) = prod_Pi4 . <w|(x_2)    # appears 2 times
+prod_vec33(x_2) = prod_Pi5 . <w|(x_2)    # appears 2 times
+prod_vec34(x_2) = prod_Pi6 . <w|(x_2)    # appears 2 times
+prod_vec35(x_2) = prod_Pi7 . <w|(x_2)    # appears 2 times
+prod_vec36(x_2) = prod_Pi8 . <w|(x_2)    # appears 2 times
+#
+# Level 2:
+prod_vec37(x_1) = <w|(x_1) . prod_vec10(x_1)    # appears 4 times
+prod_vec38(x_1) = <w|(x_1) . prod_vec11(x_1)    # appears 4 times
+prod_vec39(x_1) = <w|(x_1) . prod_vec12(x_1)    # appears 4 times
+prod_vec40(x_1) = <w|(x_1) . prod_vec13(x_1)    # appears 4 times
+prod_vec41(x_1) = <w|(x_1) . prod_vec14(x_1)    # appears 4 times
+prod_vec42(x_1) = <w|(x_1) . prod_vec15(x_1)    # appears 4 times
+prod_vec43(x_1) = <w|(x_1) . prod_vec16(x_1)    # appears 4 times
+prod_vec44(x_1) = <w|(x_1) . prod_vec5(x_1)    # appears 4 times
+prod_vec45(x_1) = <w|(x_1) . prod_vec6(x_1)    # appears 4 times
+prod_vec46(x_1) = <w|(x_1) . prod_vec7(x_1)    # appears 4 times
+prod_vec47(x_1) = <w|(x_1) . prod_vec8(x_1)    # appears 4 times
+prod_vec48(x_1) = <w|(x_1) . prod_vec9(x_1)    # appears 4 times
+prod_vec49(x_2) = <w|(x_2) . prod_vec17(x_2)    # appears 4 times
+prod_vec50(x_2) = <w|(x_2) . prod_vec18(x_2)    # appears 4 times
+prod_vec51(x_2) = <w|(x_2) . prod_vec19(x_2)    # appears 4 times
+prod_vec52(x_2) = <w|(x_2) . prod_vec20(x_2)    # appears 4 times
+prod_vec53(x_2) = <w|(x_2) . prod_vec21(x_2)    # appears 4 times
+prod_vec54(x_2) = <w|(x_2) . prod_vec22(x_2)    # appears 4 times
+prod_vec55(x_2) = <w|(x_2) . prod_vec23(x_2)    # appears 4 times
+prod_vec56(x_2) = <w|(x_2) . prod_vec24(x_2)    # appears 4 times
+prod_vec57(x_2) = <w|(x_2) . prod_vec25(x_2)    # appears 4 times
+prod_vec58(x_2) = <w|(x_2) . prod_vec26(x_2)    # appears 4 times
+prod_vec59(x_2) = <w|(x_2) . prod_vec27(x_2)    # appears 4 times
+prod_vec60(x_2) = <w|(x_2) . prod_vec28(x_2)    # appears 4 times
+
+# =========================================================
+# Phase 3: Term assembly
+# =========================================================
+term_Type10_0 = coef_Type10 * Tr[prod_vec46(x_1) . prod_vec52(x_2)] * Tr[prod_Pi1]
+term_Type10_1 = coef_Type10 * Tr[prod_vec46(x_1) . prod_vec50(x_2)] * Tr[prod_Pi2]
+term_Type10_2 = coef_Type10 * Tr[prod_vec44(x_1) . prod_vec52(x_2)] * Tr[prod_Pi5]
+term_Type10_3 = coef_Type10 * Tr[prod_vec44(x_1) . prod_vec50(x_2)] * Tr[prod_Pi6]
+term_Type10_4 = coef_Type10 * Tr[prod_vec47(x_1) . prod_vec51(x_2)] * Tr[prod_Pi1]
+term_Type10_5 = coef_Type10 * Tr[prod_vec47(x_1) . prod_vec49(x_2)] * Tr[prod_Pi5]
+term_Type10_6 = coef_Type10 * Tr[prod_vec45(x_1) . prod_vec51(x_2)] * Tr[prod_Pi2]
+term_Type10_7 = coef_Type10 * Tr[prod_vec45(x_1) . prod_vec49(x_2)] * Tr[prod_Pi6]
+term_Type11_0 = coef_Type11 * Tr[prod_vec43(x_1)] * Tr[prod_vec55(x_2)]
+term_Type11_1 = coef_Type11 * Tr[prod_vec42(x_1)] * Tr[prod_vec56(x_2)]
+term_Type11_2 = coef_Type11 * Tr[prod_vec39(x_1)] * Tr[prod_vec59(x_2)]
+term_Type11_3 = coef_Type11 * Tr[prod_vec38(x_1)] * Tr[prod_vec60(x_2)]
+term_Type12_0 = coef_Type12 * Tr[prod_vec43(x_1) . prod_vec55(x_2)]
+term_Type12_1 = coef_Type12 * Tr[prod_vec42(x_1) . prod_vec56(x_2)]
+term_Type12_2 = coef_Type12 * Tr[prod_vec39(x_1) . prod_vec59(x_2)]
+term_Type12_3 = coef_Type12 * Tr[prod_vec38(x_1) . prod_vec60(x_2)]
+term_Type1_0 = coef_Type1 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi20 . <w|(x_2) . gamma_nu |v>(x_2)]
+term_Type1_1 = coef_Type1 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi18 . <w|(x_2) . gamma_nu |v>(x_2)]
+term_Type1_2 = coef_Type1 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi12 . <w|(x_2) . gamma_nu |v>(x_2)]
+term_Type1_3 = coef_Type1 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi10 . <w|(x_2) . gamma_nu |v>(x_2)]
+term_Type1_4 = coef_Type1 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi20]
+term_Type1_5 = coef_Type1 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi18]
+term_Type1_6 = coef_Type1 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi12]
+term_Type1_7 = coef_Type1 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi10]
+term_Type2_0 = coef_Type2 * Tr[prod_vec41(x_1) . <w|(x_2) . gamma_nu |v>(x_2)] * Tr[prod_Pi1]
+term_Type2_1 = coef_Type2 * Tr[prod_vec40(x_1) . <w|(x_2) . gamma_nu |v>(x_2)] * Tr[prod_Pi2]
+term_Type2_2 = coef_Type2 * Tr[prod_vec37(x_1) . <w|(x_2) . gamma_nu |v>(x_2)] * Tr[prod_Pi5]
+term_Type2_3 = coef_Type2 * Tr[prod_vec48(x_1) . <w|(x_2) . gamma_nu |v>(x_2)] * Tr[prod_Pi6]
+term_Type2_4 = coef_Type2 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_vec58(x_2)] * Tr[prod_Pi1]
+term_Type2_5 = coef_Type2 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_vec57(x_2)] * Tr[prod_Pi2]
+term_Type2_6 = coef_Type2 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_vec54(x_2)] * Tr[prod_Pi5]
+term_Type2_7 = coef_Type2 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_vec53(x_2)] * Tr[prod_Pi6]
+term_Type3_0 = coef_Type3 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi24 . <w|(x_2) . gamma_nu |v>(x_2)]
+term_Type3_1 = coef_Type3 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi22 . <w|(x_2) . gamma_nu |v>(x_2)]
+term_Type3_2 = coef_Type3 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi16 . <w|(x_2) . gamma_nu |v>(x_2)]
+term_Type3_3 = coef_Type3 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi14 . <w|(x_2) . gamma_nu |v>(x_2)]
+term_Type3_4 = coef_Type3 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi24]
+term_Type3_5 = coef_Type3 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi22]
+term_Type3_6 = coef_Type3 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi16]
+term_Type3_7 = coef_Type3 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi14]
+term_Type4_0 = coef_Type4 * Tr[prod_vec43(x_1) . <w|(x_2) . gamma_nu |v>(x_2)] * Tr[prod_Pi1]
+term_Type4_1 = coef_Type4 * Tr[prod_vec42(x_1) . <w|(x_2) . gamma_nu |v>(x_2)] * Tr[prod_Pi5]
+term_Type4_2 = coef_Type4 * Tr[prod_vec39(x_1) . <w|(x_2) . gamma_nu |v>(x_2)] * Tr[prod_Pi2]
+term_Type4_3 = coef_Type4 * Tr[prod_vec38(x_1) . <w|(x_2) . gamma_nu |v>(x_2)] * Tr[prod_Pi6]
+term_Type4_4 = coef_Type4 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_vec60(x_2)] * Tr[prod_Pi1]
+term_Type4_5 = coef_Type4 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_vec59(x_2)] * Tr[prod_Pi5]
+term_Type4_6 = coef_Type4 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_vec56(x_2)] * Tr[prod_Pi2]
+term_Type4_7 = coef_Type4 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_vec55(x_2)] * Tr[prod_Pi6]
+term_Type5_0 = coef_Type5 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi19 . prod_vec50(x_2)]
+term_Type5_1 = coef_Type5 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi17 . prod_vec52(x_2)]
+term_Type5_2 = coef_Type5 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi11 . prod_vec50(x_2)]
+term_Type5_3 = coef_Type5 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi9 . prod_vec52(x_2)]
+term_Type5_4 = coef_Type5 * Tr[prod_vec47(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi17]
+term_Type5_5 = coef_Type5 * Tr[prod_vec47(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi9]
+term_Type5_6 = coef_Type5 * Tr[prod_vec45(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi19]
+term_Type5_7 = coef_Type5 * Tr[prod_vec45(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi11]
+term_Type6_0 = coef_Type6 * Tr[prod_vec41(x_1)] * Tr[prod_vec53(x_2)]
+term_Type6_1 = coef_Type6 * Tr[prod_vec40(x_1)] * Tr[prod_vec54(x_2)]
+term_Type6_2 = coef_Type6 * Tr[prod_vec37(x_1)] * Tr[prod_vec57(x_2)]
+term_Type6_3 = coef_Type6 * Tr[prod_vec48(x_1)] * Tr[prod_vec58(x_2)]
+term_Type7_0 = coef_Type7 * Tr[prod_vec41(x_1)] * Tr[prod_vec55(x_2)]
+term_Type7_1 = coef_Type7 * Tr[prod_vec40(x_1)] * Tr[prod_vec59(x_2)]
+term_Type7_2 = coef_Type7 * Tr[prod_vec37(x_1)] * Tr[prod_vec56(x_2)]
+term_Type7_3 = coef_Type7 * Tr[prod_vec48(x_1)] * Tr[prod_vec60(x_2)]
+term_Type7_4 = coef_Type7 * Tr[prod_vec43(x_1)] * Tr[prod_vec53(x_2)]
+term_Type7_5 = coef_Type7 * Tr[prod_vec42(x_1)] * Tr[prod_vec57(x_2)]
+term_Type7_6 = coef_Type7 * Tr[prod_vec39(x_1)] * Tr[prod_vec54(x_2)]
+term_Type7_7 = coef_Type7 * Tr[prod_vec38(x_1)] * Tr[prod_vec58(x_2)]
+term_Type8_0 = coef_Type8 * Tr[prod_vec41(x_1) . prod_vec53(x_2)]
+term_Type8_1 = coef_Type8 * Tr[prod_vec40(x_1) . prod_vec54(x_2)]
+term_Type8_2 = coef_Type8 * Tr[prod_vec37(x_1) . prod_vec57(x_2)]
+term_Type8_3 = coef_Type8 * Tr[prod_vec48(x_1) . prod_vec58(x_2)]
+term_Type9_0 = coef_Type9 * Tr[prod_vec46(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi21]
+term_Type9_1 = coef_Type9 * Tr[prod_vec46(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi13]
+term_Type9_2 = coef_Type9 * Tr[prod_vec44(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi23]
+term_Type9_3 = coef_Type9 * Tr[prod_vec44(x_1) . <w|(x_2) . gamma_nu |v>(x_2) . prod_Pi15]
+term_Type9_4 = coef_Type9 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi23 . prod_vec49(x_2)]
+term_Type9_5 = coef_Type9 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi21 . prod_vec51(x_2)]
+term_Type9_6 = coef_Type9 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi15 . prod_vec49(x_2)]
+term_Type9_7 = coef_Type9 * Tr[<w|(x_1) . gamma_mu |v>(x_1) . prod_Pi13 . prod_vec51(x_2)]
