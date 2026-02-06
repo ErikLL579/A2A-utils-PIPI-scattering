@@ -88,8 +88,16 @@ public:
                                               TensorType_TraceMomTime &Result,
                                               vector<int> &A_vector_contractions,
                                               vector<int> &B_vector_contractions,
-                                              vector<int> &C_vector_contractions); 
+                                              vector<int> &C_vector_contractions);
 
+
+
+/*
+
+
+
+
+*/
 
 
 
