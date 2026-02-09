@@ -93,13 +93,29 @@ public:
 
 
 /*
-
-
-
-
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
+// FFT functionality  
+// 
+// See https://rbc.phys.columbia.edu/rbc_ukqcd/individual_postings/ellundstrum/K_to_pipi/pipi-scattering/pi_pi_scattering_A2A.pdf
+// FFT strategy 1: Appendix B
+// \sum_i <A_i (z1)| \gamma_mu |B_i (z1)> = \phi_mu (z1)
+//
+// FFT strategy 2: Appendix C
+////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
 */
 
+// \sum_i <A_i (z1)| \gamma_mu |B_i (z1)> = \phi_mu (z1)
+static void FFT_type1_prod( std::vector<ComplexField> *phi_mu,
+		            const FermionField *Ai,
+		            const FermionField *Bj,
+		            std::vector<Gamma::Algebra> gammas);
 
+// FFT_type1_convolveo
+
+
+// FFT_type2_prod_and_convolve
 
 };
 
@@ -463,6 +479,84 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     acceleratorCopyFromDevice(&C[0], Result.data(), Nmodes * Nmodes * sizeof(ComplexD) * contractions);
 };
 
+
+
+
+template <class FImpl>                   // should be std vector but can just point to first mem location
+void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
+                                          const FermionField *Ai,
+                                          const FermionField *Bj,
+                                          const std::vector<Gamma::Algebra> gammas)
+{
+
+  typedef typename FImpl::SiteSpinor vobj;
+  typedef typename vobj::scalar_object sobj;
+  typedef typename vobj::scalar_type scalar_type;
+  typedef typename vobj::vector_type vector_type;
+
+  const int block=A2Ablocking;
+ 
+  GridBase *grid = lhs_wi[0].Grid();
+  const int Nsimd = grid->Nsimd();
+  const int    Nd = grid->_ndimension;
+
+  int Nt     = grid->GlobalDimensions()[orthogdim];
+  int Ngamma = gammas.size();
+
+  // copy gamma matrices to device
+  static deviceVector<ComplexD> gamma(Ns * Ns * Ng);
+  
+  // move gammas to Eigen matrix or something to make the below work as intended
+  acceleratorCopyToDevice(gammas.data() ,(void *)gamma[0],Ng * Ns * Ns * sizeof(ComplexD));
+
+
+  cout << GridLogMessage << "============================" << endl;
+  cout << GridLogMessage << "============================" << endl; 
+  cout << GridLogMessage << "FFT TYPE 1 CONTRACTION START" << endl;
+  cout << GridLogMessage << "============================" << endl;
+  cout << GridLogMessage << "============================" << endl;
+
+  // adjust this to be dynamic based on input
+  const int Nmodes = 100;
+  // number of blocks (adjust to keep GPU memory ~80% full)
+  // const int blocks = (Nmodes + block - 1 ) / block ; 
+
+  // might be able to speed this up by copying larger blocks?
+  for(int j=0; j<Nmodes; j++) {
+      autoView(A, Ai[j], AcceleratorRead);
+      autoView(B, Bj[j], AcceleratorRead);
+
+      for(int Ng=0; Ng<Ngamma; Ng++) {
+        autoView(Complex_v, phi_mu[Ng], AcceleratorWrite);      
+
+        accelerator_for(ss, grid->oSites(), (size_t)Nsimd,{ 
+          // one should be conjugate or this is implicit in A2A vector as saved?
+          auto left = A(ss);
+          auto right = B(ss);
+
+          auto vv = Complex_v(ss);
+
+          for(int s1=0, s1<Ns; s1++) {
+            for(int s2=0; s2<Ns; s2++) {
+              // sum over final index = colour contraction
+              // check left and right on the below
+              vv = vv + left()(s2)(0) * gamma[Ng * Ns * Ns + s2 * Ns + s1] * right()(s1)(0)
+                      + left()(s2)(1) * gamma[Ng * Ns * Ns + s2 * Ns + s1] * right()(s1)(1)
+                      + left()(s2)(2) * gamma[Ng * Ns * Ns + s2 * Ns + s1] * right()(s1)(2);
+          }
+          coalescedWrite(Complex_v[ss], vv);
+        });
+      }
+
+  }
+
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "FFT TYPE 1 CONTRACTION COMPLETE" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+
+};
 
 
 NAMESPACE_END(Grid);
