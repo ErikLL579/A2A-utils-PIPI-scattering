@@ -109,6 +109,8 @@ public:
 ////////////////////////////////////////////////////////////////////////
 */
 
+// may want to add functionality to the following that splits up the mode indices by MPI rank
+
 // \sum_i <A_i (z1)| \gamma_mu |B_i (z1)> = \phi_mu (z1)
                             // usage: &phi_mu[0]
   static void FFT_type1_prod( ComplexField *phi_mu,

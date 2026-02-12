@@ -12,7 +12,7 @@ using namespace Grid;
 using namespace std;
 
 const int TSRC = 0;  //timeslice where rho is nonzero
-const int VDIM = 100; //length of each vector
+const int VDIM = 2000; //length of each vector
 
 typedef typename DomainWallFermionD::ComplexField ComplexField;
 typedef typename DomainWallFermionD::FermionField FermionField;
@@ -56,8 +56,8 @@ int main(int argc, char *argv[])
 
   // Gamma matrices used in the contraction
   std::vector<Gamma::Algebra> Gmu = {
-    Gamma::Algebra::GammaT,
     Gamma::Algebra::GammaX,
+    Gamma::Algebra::GammaT,
     Gamma::Algebra::GammaY,
     Gamma::Algebra::GammaZ
   };
@@ -76,6 +76,8 @@ int main(int argc, char *argv[])
 
  stop = usecond();
  std::cout << GridLogMessage << "FFT type 1 execution time " << stop-start << " us" << std::endl;
+
+  cout << GridLogMessage << "CHECKING PHI_MU NORMS. 0 =  " << norm2(phi_mu[0]) << " 1 = " << norm2(phi_mu[1]) << " 2 = " << norm2(phi_mu[2])  << " 3 = " << norm2(phi_mu[3]) << endl;
 
 
   // epilogue
