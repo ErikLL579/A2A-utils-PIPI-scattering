@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
   Coordinate mpi_layout  = GridDefaultMpi();
   GridCartesian    grid(latt_size,simd_layout,mpi_layout);
   int Nt = GridDefaultLatt()[Tp];
-  int Nd = grid->Dimensions();
+  int Nd = &grid->Dimensions();
 
   Lattice<iScalar<vInteger>> t(&grid);
   LatticeCoordinate(t, Tp);
@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
   std::vector<ComplexField> phi_mu(Nd, &grid);
 
   std::cout << GridLogMessage << "Initialising random meson fields" << std::endl;
-  for (unsigned int i = 0; i < VDIM; ++i){
+  for (unsigned int i = 0; i < VDIM; ++i) {
     random(pRNG,phi1[i]);
     random(pRNG,phi2[i]);
     random(pRNG,phi3[i]);
@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
  PipiA2Autils<WilsonImplR>::FFT_type1_prod( &phi_mu[0],
                                             &phi1[0],
                                             &phi2[0],
-                                            Gmu)
+                                            Gmu);
 
  stop = usecond();
  std::cout << GridLogMessage << "FFT type 1 execution time " << stop-start << " us" << std::endl;
