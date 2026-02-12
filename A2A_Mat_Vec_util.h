@@ -127,6 +127,14 @@ public:
 
 // FFT_type2_prod_and_convolve
 
+static void FFT_type2_contract_convolve(ComplexD &Result, 
+                                        ComplexField *phi_mu,
+                                        const FermionField *Ai,
+                                        const FermionField *Bi,
+                                        const FermionField *wi, 
+                                        const FermionField *vi,
+                                        std::vector<Gamma::Algebra> gammas);
+
 };
 
 /////////////////////////////////////////////////////////////////////////
@@ -618,6 +626,68 @@ void PipiA2Autils<FImpl>::FFT_type1_convolve(ComplexD &Result,
   cout << GridLogMessage << "===============================" << endl;
 
 };
+
+
+
+template <class FImpl>
+void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,  
+                                                      ComplexField *phi_mu, 
+                                                      const FermionField *Ai, 
+                                                      const FermionField *Bi, 
+                                                      const FermionField *wi,  
+                                                      const FermionField *vi, 
+                                                      std::vector<Gamma::Algebra> gammas);
+{
+
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "BEGIN: FFT TYPE 2 CONV + CONT" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+
+
+  int Nd = grid->Dimensions();                                       
+  GridBase *grid = Ai[0].Grid();
+  int Ngamma = gammas.size();
+
+  // placeholder number modes
+  const int Nmodes = 100;
+
+  vector<ComplexField> g_i3i2_nu(Ngamma, &grid);
+  vector<ComplexField> Kg_i3i2_mu_phtn(Ngamma, &grid);
+
+  FFT theFFT(&grid);
+
+  for(int i2=0; i2<Nmodes; i2++){
+    for(int i3=0; i3<Nmodes; i2++) {
+      for(int nu=0; nu<Ngamma; nu++) {
+        g_i3i2_nu[nu] = localInnerProduct(wi[i3], Gamma(gammas[Ng]) * vi[i2]);
+        
+        // using g_i3i2_nu as Kg_i3i2_nu for mem
+        theFFT.FFT_all_dim(g_i3i2_nu[nu], g_i3i2_nu[nu], FFT::forward);
+
+	for(int mu=0; mu<Ngamma; mu++) Kg_i3i2_mu_phtn[mu] = Kg_i3i2_mu_phtn[mu] + g_i3i2_nu[nu] * phtn_prop_mu_nu[nu*Nd + mu];
+      }
+
+      for(int mu=0; mu<Ngamma; mu++) {
+        // using g_i3_i2_nu as G_i3i2_mu for mem
+        theFFT.FFT_all_dim(g_i3i2_nu[mu], Kg_i3i2_mu_phtn[mu], FFT::backward);
+        Result = Result + sum(g_i3i2_nu[mu] * localInnerProduct(Ai[i2], Gamma(gammas[mu]) * Bi[i3]) );
+      }
+    }
+  }
+
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "COMPLETE: FFT TYPE 2 CONV + CONT" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+
+
+
+};
+
+
 
 
 NAMESPACE_END(Grid);
