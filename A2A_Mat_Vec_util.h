@@ -516,7 +516,6 @@ void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
   const int Nsimd = grid->Nsimd();
   const int    Nd = grid->_ndimension;
 
-  int Nt     = grid->GlobalDimensions()[orthogdim];
   int Ngamma = gammas.size();
 
   
@@ -538,7 +537,7 @@ void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
 
   for(int j=0; j<Nmodes; j++) {
     for(int Ng=0; Ng<Ngamma; Ng++) {
-      phi_mu[Ng] = localInnerProduct(Ai[j], Gamma(gammas[Ng]) * Bi[j]);
+      phi_mu[Ng] = localInnerProduct(Ai[j], Gamma(gammas[Ng]) * Bj[j]);
     }
   }
   
@@ -586,7 +585,7 @@ template <class FImpl>
 void PipiA2Autils<FImpl>::FFT_type1_convolve(ComplexD &Result,
                                              ComplexField *phi1_mu,
                                              ComplexField *phi2_nu,
-                                             ComplexField *phtn_prop_mu_nu);
+                                             ComplexField *phtn_prop_mu_nu)
 {
   cout << GridLogMessage << "===============================" << endl;
   cout << GridLogMessage << "===============================" << endl;
@@ -594,9 +593,10 @@ void PipiA2Autils<FImpl>::FFT_type1_convolve(ComplexD &Result,
   cout << GridLogMessage << "===============================" << endl;
   cout << GridLogMessage << "===============================" << endl;
 
+  GridBase *grid = phi1_mu[0].Grid(); 
+
   int Nd = grid->Dimensions();
 
-  GridBase *grid = phi1_mu[0].Grid();  
   vector<ComplexField> tilde_phi1_mu(Nd, &grid);
   vector<ComplexField> tilde_phi_phtn_nu(Nd, &grid);
   vector<ComplexField> phi_phtn_nu(Nd, &grid);  
@@ -682,8 +682,6 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
   cout << GridLogMessage << "===============================" << endl;
 
 };
-
-
 
 
 NAMESPACE_END(Grid);
