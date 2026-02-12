@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
   Coordinate mpi_layout  = GridDefaultMpi();
   GridCartesian    grid(latt_size,simd_layout,mpi_layout);
   int Nt = GridDefaultLatt()[Tp];
-  int Nd = grid->Dimensions();
+  int Nd = grid.Dimensions();
 
   Lattice<iScalar<vInteger>> t(&grid);
   LatticeCoordinate(t, Tp);

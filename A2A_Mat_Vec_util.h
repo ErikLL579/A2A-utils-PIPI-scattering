@@ -537,7 +537,8 @@ void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
 
   for(int j=0; j<Nmodes; j++) {
     for(int Ng=0; Ng<Ngamma; Ng++) {
-      phi_mu[Ng] = localInnerProduct(Ai[j], Gamma(gammas[Ng]) * Bj[j]);
+      auto tmp = Gamma(gammas[Ng]) * Bj[j];
+      phi_mu[Ng] = localInnerProduct(Ai[j], tmp);
     }
   }
   
@@ -597,11 +598,12 @@ void PipiA2Autils<FImpl>::FFT_type1_convolve(ComplexD &Result,
 
   int Nd = grid->Dimensions();
 
-  vector<ComplexField> tilde_phi1_mu(Nd, &grid);
-  vector<ComplexField> tilde_phi_phtn_nu(Nd, &grid);
-  vector<ComplexField> phi_phtn_nu(Nd, &grid);  
+  vector<ComplexField> tilde_phi1_mu(Nd, grid);
+  vector<ComplexField> tilde_phi_phtn_nu(Nd, grid);
+  vector<ComplexField> phi_phtn_nu(Nd, grid);
 
-  FFT theFFT(&grid);
+  //FFT theFFT(&grid);
+  FFT theFFT(dynamic_cast<GridCartesian *>(grid));
 
   for(int mu=0; mu<Nd; mu++) theFFT.FFT_all_dim(tilde_phi1_mu[mu], phi1_mu[mu], FFT::forward);
 
@@ -612,7 +614,7 @@ void PipiA2Autils<FImpl>::FFT_type1_convolve(ComplexD &Result,
   }
 
   for(int nu=0; nu<Nd; nu++) {
-    theFFT.FFT_all_dim(phi_phtn_nu[nu], tilde_phi_phtn_nu[nu], FFT::backwards);
+    theFFT.FFT_all_dim(phi_phtn_nu[nu], tilde_phi_phtn_nu[nu], FFT::backward);
     
     Result += sum(phi_phtn_nu[nu] * phi2_nu[nu]);
   }
@@ -644,17 +646,17 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
   cout << GridLogMessage << "===============================" << endl;
 
 
-  int Nd = grid->Dimensions();                                       
   GridBase *grid = Ai[0].Grid();
+  
   int Ngamma = gammas.size();
-
+  int Nd = grid->Dimensions();
   // placeholder number modes
   const int Nmodes = 100;
 
-  vector<ComplexField> g_i3i2_nu(Ngamma, &grid);
-  vector<ComplexField> Kg_i3i2_mu_phtn(Ngamma, &grid);
+  vector<ComplexField> g_i3i2_nu(Ngamma, grid);
+  vector<ComplexField> Kg_i3i2_mu_phtn(Ngamma, grid);
 
-  FFT theFFT(&grid);
+  FFT theFFT(dynamic_cast<GridCartesian *>(grid));
 
   for(int i2=0; i2<Nmodes; i2++){
     for(int i3=0; i3<Nmodes; i2++) {
