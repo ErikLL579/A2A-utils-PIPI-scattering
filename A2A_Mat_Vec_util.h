@@ -101,6 +101,9 @@ public:
 // FFT strategy 1: Appendix B
 // \sum_i <A_i (z1)| \gamma_mu |B_i (z1)> = \phi_mu (z1)
 //
+//  
+//
+//
 // FFT strategy 2: Appendix C
 ////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////
@@ -108,12 +111,18 @@ public:
 
 // \sum_i <A_i (z1)| \gamma_mu |B_i (z1)> = \phi_mu (z1)
                             // usage: &phi_mu[0]
-static void FFT_type1_prod( ComplexField *phi_mu,
-		            const FermionField *Ai,
-		            const FermionField *Bj,
-		            std::vector<Gamma::Algebra> gammas);
+  static void FFT_type1_prod( ComplexField *phi_mu,
+  		              const FermionField *Ai,
+		              const FermionField *Bj,
+		              std::vector<Gamma::Algebra> gammas);
 
-// FFT_type1_convolveo
+
+
+// FFT_type1_convolve 
+ static void FFT_type1_convolve(ComplexD &Result,
+                                ComplexField *phi1_mu,
+                                ComplexField *phi2_nu,
+                                ComplexField *phtn_prop_mu_nu);
 
 
 // FFT_type2_prod_and_convolve
@@ -497,18 +506,17 @@ void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
 
   const int block=A2Ablocking;
  
-  GridBase *grid = lhs_wi[0].Grid();
+  GridBase *grid = Ai[0].Grid();
   const int Nsimd = grid->Nsimd();
   const int    Nd = grid->_ndimension;
 
   int Nt     = grid->GlobalDimensions()[orthogdim];
   int Ngamma = gammas.size();
 
-  // copy gamma matrices to device
-  static deviceVector<ComplexD> gamma(Ns * Ns * Ng);
   
-  // move gammas to Eigen matrix or something to make the below work as intended
-  acceleratorCopyToDevice(gammas.data() ,(void *)gamma[0],Ng * Ns * Ns * sizeof(ComplexD));
+  // copy gamma matrices to device (for manual implementation)
+  // static deviceVector<ComplexD> gamma(Ns * Ns * Ng);
+  // acceleratorCopyToDevice(gammas.data() ,(void *)gamma[0],Ng * Ns * Ns * sizeof(ComplexD));
 
 
   cout << GridLogMessage << "============================" << endl;
@@ -522,7 +530,13 @@ void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
   // number of blocks (adjust to keep GPU memory ~80% full)
   // const int blocks = (Nmodes + block - 1 ) / block ; 
 
-  // might be able to speed this up by copying larger blocks?
+  for(int j=0; j<Nmodes; j++) {
+    for(int Ng=0; Ng<Ngamma; Ng++) {
+      phi_mu[Ng] = localInnerProduct(Ai[j], Gamma(gammas[Ng]) * Bi[j]);
+    }
+  }
+  
+  /* Manual implementation
   for(int j=0; j<Nmodes; j++) {
       autoView(A, Ai[j], AcceleratorRead);
       autoView(B, Bj[j], AcceleratorRead);
@@ -550,6 +564,7 @@ void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
       }
 
   }
+  */
 
   cout << GridLogMessage << "===============================" << endl;
   cout << GridLogMessage << "===============================" << endl;
@@ -560,4 +575,51 @@ void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
 };
 
 
+
+template <class FImpl>
+void PipiA2Autils<FImpl>::FFT_type1_convolve(ComplexD &Result,
+                                             ComplexField *phi1_mu,
+                                             ComplexField *phi2_nu,
+                                             ComplexField *phtn_prop_mu_nu);
+{
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "BEGIN: FFT TYPE 1 CONVOLUTION" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+
+  int Nd = grid->Dimensions();
+
+  GridBase *grid = phi1_mu[0].Grid();  
+  vector<ComplexField> tilde_phi1_mu(Nd, &grid);
+  vector<ComplexField> tilde_phi_phtn_nu(Nd, &grid);
+  vector<ComplexField> phi_phtn_nu(Nd, &grid);  
+
+  FFT theFFT(&grid);
+
+  for(int mu=0; mu<Nd; mu++) theFFT.FFT_all_dim(tilde_phi1_mu[mu], phi_mu[mu], FFT::forward);
+
+  for(int nu=0; nu<Nd; nu++) {
+    for(int mu=0; mu<Nd; mu++) {
+      tilde_phi_phtn_nu[nu] = tilde_phi_phtn_nu[nu] + tilde_phi1_mu[mu] *  phtn_prop_mu_nu[nu*Nd + mu];
+    }
+  }
+
+  for(int nu=0; nu<Nd; nu++) {
+    theFFT.FFT_all_dim(phi_phtn_nu[nu], tilde_phi_phtn_nu[nu], FFT::backwards);
+    
+    Result += sum(phi_phtn_nu[nu] * phi2_nu[nu]);
+  }
+
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "COMPLETE: FFT TYPE 1 CONVOLUTION" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+
+};
+
+
 NAMESPACE_END(Grid);
+
+
