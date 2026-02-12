@@ -471,15 +471,12 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // cant use same ptr for two arguments: blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, Cs, Bs, beta, Cs);
     // will have to istead mix up the ones that are fed into the arguments
     // ======================================================================================================
- 
-    RealD t0 = usecond();
-    
+    /*
     // (rotated arguments here for illustration)
     // (check that the matrices are transposed correctly)
-    blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, Cs, As, beta, Bs);
+     blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, Cs, As, beta, Bs);
     blas.synchronise();
     
-    RealD t1 = usecond();
     flops = flops / (t1 - t0) / 1.e3;
 
     cout << GridLogMessage << "=================================================== " << endl;
@@ -492,7 +489,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
     // write out the DC pieces for use in zeroth order diagrams and EM corrections to DC diagram
     cout << GridLogMessage << "COPYING RESULTS TO HOST" << endl;
-    
+    */
+
     //Eigen::Tensor<ComplexD,4, Eigen::RowMajor> c(momenta.size(),Nt,Nmodes,Nmodes);
     acceleratorCopyFromDevice(&C[0], Result.data(), Nmodes * Nmodes * sizeof(ComplexD) * contractions);
 };
