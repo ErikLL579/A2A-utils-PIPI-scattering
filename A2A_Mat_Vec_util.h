@@ -376,7 +376,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
                                                             vector<int> &A_vector_contractions,
                                                             vector<int> &B_vector_contractions,
                                                             vector<int> &C_vector_contractions)
- 
+{ 
     const int block=A2Ablocking;
     typedef typename vobj::scalar_object sobj;
     typedef typename vobj::scalar_type scalar_type;
@@ -682,8 +682,6 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
   cout << GridLogMessage << "COMPLETE: FFT TYPE 2 CONV + CONT" << endl;
   cout << GridLogMessage << "===============================" << endl;
   cout << GridLogMessage << "===============================" << endl;
-
-
 
 };
 
