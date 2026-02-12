@@ -114,7 +114,7 @@ public:
   static void FFT_type1_prod( ComplexField *phi_mu,
   		              const FermionField *Ai,
 		              const FermionField *Bj,
-		              std::vector<Gamma::Algebra> gammas);
+		              const std::vector<Gamma::Algebra> gammas);
 
 
 
@@ -133,7 +133,7 @@ static void FFT_type2_contract_convolve(ComplexD &Result,
                                         const FermionField *wi, 
                                         const FermionField *vi,
                                         const ComplexField *phtn_prop_mu_nu,
-                                        std::vector<Gamma::Algebra> gammas);
+                                        const std::vector<Gamma::Algebra> gammas);
 
 };
 
@@ -583,9 +583,9 @@ void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
 
 template <class FImpl>
 void PipiA2Autils<FImpl>::FFT_type1_convolve(ComplexD &Result,
-                                             ComplexField *phi1_mu,
-                                             ComplexField *phi2_nu,
-                                             ComplexField *phtn_prop_mu_nu)
+                                             const ComplexField *phi1_mu,
+                                             const ComplexField *phi2_nu,
+                                             const ComplexField *phtn_prop_mu_nu)
 {
   cout << GridLogMessage << "===============================" << endl;
   cout << GridLogMessage << "===============================" << endl;
@@ -634,7 +634,7 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
                                                       const FermionField *wi,
                                                       const FermionField *vi,
                                                       const ComplexField *phtn_prop_mu_nu,
-                                                      std::vector<Gamma::Algebra> gammas)
+                                                      const std::vector<Gamma::Algebra> gammas)
 {
 
   cout << GridLogMessage << "===============================" << endl;
@@ -659,7 +659,7 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
   for(int i2=0; i2<Nmodes; i2++){
     for(int i3=0; i3<Nmodes; i2++) {
       for(int nu=0; nu<Ngamma; nu++) {
-        g_i3i2_nu[nu] = localInnerProduct(wi[i3], Gamma(gammas[Nu]) * vi[i2]);
+        g_i3i2_nu[nu] = localInnerProduct(wi[i3], Gamma(gammas[nu]) * vi[i2]);
         
         // using g_i3i2_nu as Kg_i3i2_nu for mem
         theFFT.FFT_all_dim(g_i3i2_nu[nu], g_i3i2_nu[nu], FFT::forward);
@@ -685,5 +685,4 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
 
 
 NAMESPACE_END(Grid);
-
 
