@@ -537,8 +537,8 @@ void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
 
   for(int j=0; j<Nmodes; j++) {
     for(int Ng=0; Ng<Ngamma; Ng++) {
-      auto tmp = Gamma(gammas[Ng]) * Bj[j];
-      phi_mu[Ng] = localInnerProduct(Ai[j], tmp);
+      FermionField tmp = Gamma(gammas[Ng]) * Bj[j];
+      phi_mu[Ng] = phi_mu[Ng] + localInnerProduct(Ai[j], tmp);
     }
   }
   
@@ -672,7 +672,8 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
       for(int mu=0; mu<Ngamma; mu++) {
         // using g_i3_i2_nu as G_i3i2_mu for mem
         theFFT.FFT_all_dim(g_i3i2_nu[mu], Kg_i3i2_mu_phtn[mu], FFT::backward);
-        Result = Result + sum(g_i3i2_nu[mu] * localInnerProduct(Ai[i2], Gamma(gammas[mu]) * Bi[i3]) );
+        FermionField tmp = Gamma(gammas[mu]) * Bi[i3];
+        Result = Result + sum(g_i3i2_nu[mu] * tmp );
       }
     }
   }
