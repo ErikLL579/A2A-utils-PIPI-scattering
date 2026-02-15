@@ -656,7 +656,9 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
   const int Nmodes = 100;
 
   vector<ComplexField> g_i3i2_nu(Ngamma, grid);
+
   vector<ComplexField> Kg_i3i2_mu_phtn(Ngamma, grid);
+  for (int rho=0; rho<Ngamma; rho++) Kg_i3i2_mu_phtn[rho] = Zero();
 
   FFT theFFT(dynamic_cast<GridCartesian *>(grid));
 
@@ -691,4 +693,5 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
 
 
 NAMESPACE_END(Grid);
+
 
