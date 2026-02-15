@@ -1,4 +1,4 @@
-//#include <Grid/Hadrons/Global.hpp>
+\//#include <Grid/Hadrons/Global.hpp>
 #include <Grid/Grid_Eigen_Tensor.h>
 
 
@@ -533,7 +533,7 @@ void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
   cout << GridLogMessage << "============================" << endl;
 
   // adjust this to be dynamic based on input
-  const int Nmodes = 100;
+  const int Nmodes = 10;
   // number of blocks (adjust to keep GPU memory ~80% full)
   // const int blocks = (Nmodes + block - 1 ) / block ; 
 
@@ -653,7 +653,7 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
   int Ngamma = gammas.size();
   int Nd = grid->Dimensions();
   // placeholder number modes
-  const int Nmodes = 100;
+  const int Nmodes = 10;
 
   vector<ComplexField> g_i3i2_nu(Ngamma, grid);
 
@@ -672,13 +672,15 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
         theFFT.FFT_all_dim(g_i3i2_nu[nu], g_i3i2_nu[nu], FFT::forward);
 
 	for(int mu=0; mu<Ngamma; mu++) Kg_i3i2_mu_phtn[mu] = Kg_i3i2_mu_phtn[mu] + g_i3i2_nu[nu] * phtn_prop_mu_nu[nu*Nd + mu];
+        //for(int mu=0; mu<Ngamma; mu++) {Kg_i3i2_mu_phtn[mu] = g_i3i2_nu[nu] * phtn_prop_mu_nu[nu*Nd + mu];} // this is just for debug
       }
 
       for(int mu=0; mu<Ngamma; mu++) {
         // using g_i3_i2_nu as G_i3i2_mu for mem
         theFFT.FFT_all_dim(g_i3i2_nu[mu], Kg_i3i2_mu_phtn[mu], FFT::backward);
         FermionField tmp = Gamma(gammas[mu]) * Bi[i3];
-        Result = Result + sum(g_i3i2_nu[mu] * tmp );
+        ComplexField ttmp = localInnerProduct(Ai[i2], tmp);
+        Result += innerProduct(g_i3i2_nu[mu], ttmp ) ;
       }
     }
   }
@@ -693,5 +695,6 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
 
 
 NAMESPACE_END(Grid);
+
 
 
