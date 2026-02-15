@@ -77,7 +77,56 @@ int main(int argc, char *argv[])
  stop = usecond();
  std::cout << GridLogMessage << "FFT type 1 execution time " << stop-start << " us" << std::endl;
 
-  cout << GridLogMessage << "CHECKING PHI_MU NORMS. 0 =  " << norm2(phi_mu[0]) << " 1 = " << norm2(phi_mu[1]) << " 2 = " << norm2(phi_mu[2])  << " 3 = " << norm2(phi_mu[3]) << endl;
+ cout << GridLogMessage << "CHECKING PHI_MU NORMS. 0 =  " << norm2(phi_mu[0]) << " 1 = " << norm2(phi_mu[1]) << " 2 = " << norm2(phi_mu[2])  << " 3 = " << norm2(phi_mu[3]) << endl;
+
+  cout << GridLogMessage << "==============================================================" << endl;
+  cout << GridLogMessage << "TESTING FFT TYPE 1" << endl; 
+  cout << GridLogMessage << "==============================================================" << endl;
+
+
+  cout << GridLogMessage << "START: RANDOM PHOTON PROPAGATOR FIELDS "<< endl;
+  // create test photon fields
+  vector<ComplexField> phtn_mu_nu(Nd*Nd, &grid);
+  for(int mu=0; mu<Nd; mu++) {
+    for(int nu=0; nu<Nd; nu++) {
+      random(pRNG,phtn_mu_nu[mu*Nd + nu]);
+    }
+  }
+  cout << GridLogMessage << "COMPLETE: RANDOM PHOTON PROPAGATOR FIELDS "<< endl;
+
+
+  ComplexD Result;
+
+  cout << GridLogMessage << "START: TYPE1 FFT  "<< endl;
+  start = usecond();
+
+  PipiA2Autils<WilsonImplR>::FFT_type1_convolve(Result,
+		                                &phi_mu[0],
+                  		                &phi_mu[0],
+                              	    	        &phtn_mu_nu[0]);
+  stop = usecond();
+  std::cout << GridLogMessage << "FFT type 1 execution time " << stop-start << " us" << std::endl;
+  cout << GridLogMessage << "COMPLETE: TYPE1 FFT  "<< endl;
+ 
+  cout << GridLogMessage << "CHECK RESULT = " << Result  << endl;
+
+
+  cout << GridLogMessage << "==============================================================" << endl;
+  cout << GridLogMessage << "TESTING FFT TYPE 2" << endl; 
+  cout << GridLogMessage << "==============================================================" << endl; 
+
+  Result = Complex(0.0, 0.0);
+
+  start = usecond();
+  PipiA2Autils<WilsonImplR>::FFT_type2_contract_convolve(Result,
+  							 &phi1[0], &phi2[0], &phi3[0], &phi4[0],
+							 &phtn_mu_nu[0],
+							 Gmu);
+
+  stop = usecond();
+  std::cout << GridLogMessage << "FFT type 2 execution time " << stop-start << " us" << std::endl;
+  cout << GridLogMessage << "COMPLETE: TYPE2 FFT  "<< endl;
+  cout << GridLogMessage << "CHECK RESULT = " << Result  << endl;
 
 
   // epilogue

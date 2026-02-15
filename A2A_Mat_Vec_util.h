@@ -663,7 +663,8 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
   for(int i2=0; i2<Nmodes; i2++){
     for(int i3=0; i3<Nmodes; i2++) {
       for(int nu=0; nu<Ngamma; nu++) {
-        g_i3i2_nu[nu] = localInnerProduct(wi[i3], Gamma(gammas[nu]) * vi[i2]);
+        FermionField tmp = Gamma(gammas[nu]) * vi[i2] ;
+        g_i3i2_nu[nu] = localInnerProduct(wi[i3], tmp);
         
         // using g_i3i2_nu as Kg_i3i2_nu for mem
         theFFT.FFT_all_dim(g_i3i2_nu[nu], g_i3i2_nu[nu], FFT::forward);
