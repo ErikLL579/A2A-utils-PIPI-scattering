@@ -1,4 +1,4 @@
-\//#include <Grid/Hadrons/Global.hpp>
+//#include <Grid/Hadrons/Global.hpp>
 #include <Grid/Grid_Eigen_Tensor.h>
 
 
