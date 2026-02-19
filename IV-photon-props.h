@@ -11,29 +11,29 @@ class IVPhotonPropagator
    
   typedef typename FImpl::ComplexField ComplexField;
 
-  static void FeynmanGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, ComplexD min_momenta);
+  static void FeynmanGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta);
 
-  static void CoulombGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, ComplexD min_momenta){ GRID_ASSERT(0); };
+  static void CoulombGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta){ GRID_ASSERT(0); };
 
-  static void LandauGaugeMomentumSpace(  ComplexField *phtn_prop_mu_nu, ComplexD min_momenta){ GRID_ASSERT(0); };
+  static void LandauGaugeMomentumSpace(  ComplexField *phtn_prop_mu_nu, RealD min_momenta){ GRID_ASSERT(0); };
 
-  static void FeynmanGaugePositionSpace( ComplexField *phtn_prop_mu_nu, ComplexD min_momenta);
+  static void FeynmanGaugePositionSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta);
   
-  static void CoulombGaugePositionSpace( ComplexField *phtn_prop_mu_nu, ComplexD min_momenta){ GRID_ASSERT(0); };
+  static void CoulombGaugePositionSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta){ GRID_ASSERT(0); };
   
-  static void LandauGaugePositionSpace(  ComplexField *phtn_prop_mu_nu, ComplexD min_momenta){ GRID_ASSERT(0); };
+  static void LandauGaugePositionSpace(  ComplexField *phtn_prop_mu_nu, RealD min_momenta){ GRID_ASSERT(0); };
 
 };
 
   template <class FImpl>
-  void IVPhotonPropagator<FImpl>::FeynmanGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, ComplexD min_momenta)
+  void IVPhotonPropagator<FImpl>::FeynmanGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta)
   {
      GridBase *grid = phtn_prop_mu_nu[0].Grid();
      int Nd = grid->Dimensions();
      Coordinate latt_size = grid->FullDimensions(); 
 
-     LatticeComplexD   coor(grid);
-     LatticeComplexD  k_sqr(grid);
+     LatticeRealD   coor(grid);
+     LatticeRealD  k_sqr(grid);
      k_sqr = Zero();
   
      // zero out phtn_prop
@@ -43,16 +43,23 @@ class IVPhotonPropagator
        RealD TwoPiL =  M_PI * 2.0/ latt_size[mu];
        LatticeCoordinate(coor, mu);
        // (-pi, pi]
-       coor = where(IsTrue(coor > RealD(latt_size[mu]/2 - 1)), coor - RealD(latt_size[mu]), coor);
+       coor = where(coor > RealD(latt_size[mu]/2 - 1), coor - RealD(latt_size[mu]), coor);
        k_sqr = k_sqr + coor * coor * (TwoPiL * TwoPiL);       
      }
 
-     LatticeComplexD k_sqr_safe = where(IsTrue(k_sqr < min_momenta), ComplexD(1.0, 0.0), k_sqr);
-     LatticeComplexD prop = where(IsTrue(k_sqr < min_momenta), ComplexD(0.0, 0.0), 1.0 / k_sqr_safe);
+     LatticeRealD prop(grid);
+     LatticeRealD one(grid);
+     prop = Zero();                                                                                                                                                                                                                      
+     one = RealD(1.0); 
+
+     prop = where(k_sqr < min_momenta, prop , one / k_sqr);
+
+     ComplexField complex_prop(grid);
+     complex_prop = toComplex(prop);
 
      // only one loop over mu here because diagonal matrix
      for(int mu=0; mu<Nd; mu++) {
-       phtn_prop_mu_nu[mu*Nd + mu] = prop;     
+       phtn_prop_mu_nu[mu*Nd + mu] = complex_prop;     
      }
 
 
@@ -60,7 +67,7 @@ class IVPhotonPropagator
 
 
   template <class FImpl>
-  void IVPhotonPropagator<FImpl>::FeynmanGaugePositionSpace( ComplexField *phtn_prop_mu_nu, ComplexD min_momenta)
+  void IVPhotonPropagator<FImpl>::FeynmanGaugePositionSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta)
   {
    GridBase *grid = phtn_prop_mu_nu[0].Grid(); 
    int Nd = grid->Dimensions();
