@@ -88,6 +88,48 @@ int main(int argc, char *argv[])
 
   //////////////////////////////
 
+  cout << GridLogMessage << "TRY POSITION SPACE FEYNMAN PROP  "<< endl;
+  start = usecond();
+
+  IVPhotonPropagator<WilsonImplR>::FeynmanGaugePositionSpace( &phtn_mu_nu[0], min);
+
+
+  // claude position space test here //
+
+  // Check diagonal at origin and a few sites
+  cout << GridLogMessage << "=== Position space D_00(x) ===" << endl;
+  for (int x = 0; x < 4; x++) {
+    coor = Coordinate({x, 0, 0, 0});
+    peekSite(site, phtn_mu_nu[0*Nd + 0], coor);
+    cout << GridLogMessage << "D_00 at x=(" << x << ",0,0,0) = " << site << endl;
+  }
+
+  // Check off-diagonal still zero in position space (FFT preserves zero)
+  cout << GridLogMessage << "=== Position space off-diagonal (should be zero) ===" << endl;
+  coor = Coordinate({1, 1, 0, 0});
+  peekSite(site, phtn_mu_nu[0*Nd + 1], coor);
+  cout << GridLogMessage << "D_01 at x=(1,1,0,0) = " << site << endl;
+
+  // Check symmetry: D(x) should equal D(-x) = D(L-x)
+  cout << GridLogMessage << "=== Symmetry check: D_00(1,0,0,0) vs D_00(L-1,0,0,0) ===" << endl;
+  coor = Coordinate({1, 0, 0, 0});
+  peekSite(site, phtn_mu_nu[0*Nd + 0], coor);
+  cout << GridLogMessage << "D_00 at x=(1,0,0,0)   = " << site << endl;
+  coor = Coordinate({latt_size[0]-1, 0, 0, 0});
+  peekSite(site, phtn_mu_nu[0*Nd + 0], coor);
+  cout << GridLogMessage << "D_00 at x=(L-1,0,0,0) = " << site << endl;
+
+  // Propagator should be real in position space
+  cout << GridLogMessage << "=== Reality check (imag parts should be ~0) ===" << endl;
+  coor = Coordinate({1, 1, 1, 1});
+  peekSite(site, phtn_mu_nu[0*Nd + 0], coor);
+  cout << GridLogMessage << "D_00 at x=(1,1,1,1) = " << site << endl;
+
+  /////////////////////////////////////
+
+  stop = usecond();
+  std::cout << GridLogMessage << "POS SPACE PHOTON PROPAGATOR GENERATION TIME " << stop-start << " us" << std::endl;
+
 
   // epilogue
   std::cout << GridLogMessage << "Grid is finalizing now" << std::endl;
