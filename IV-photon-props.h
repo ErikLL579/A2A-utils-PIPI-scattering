@@ -59,7 +59,6 @@ class IVPhotonPropagator
   };
 
 
-
   template <class FImpl>
   void IVPhotonPropagator<FImpl>::FeynmanGaugePositionSpace( ComplexField *phtn_prop_mu_nu, ComplexD min_momenta)
   {
@@ -70,8 +69,9 @@ class IVPhotonPropagator
 
    IVPhotonPropagator<FImpl>::FeynmanGaugeMomentumSpace(&phtn_prop_mu_nu[0], min_momenta);
 
-   for(int i=0; i<Nd*Nd; i++) { theFFT.FFT_all_dim(phtn_prop_mu_nu[i], phtn_prop_mu_nu[i], FFT::backward);
-   
+   // might have to add tmp instead of FFT in place
+   // only do diagonal elements bc FFT * 0 = 0 
+   for(int mu=0; mu<Nd; mu++) theFFT.FFT_all_dim(phtn_prop_mu_nu[mu*Nd + mu], phtn_prop_mu_nu[mu*Nd + mu], FFT::backward);   
 
   };
 
