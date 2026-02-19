@@ -130,6 +130,27 @@ int main(int argc, char *argv[])
   stop = usecond();
   std::cout << GridLogMessage << "POS SPACE PHOTON PROPAGATOR GENERATION TIME " << stop-start << " us" << std::endl;
 
+  std::cout << GridLogMessage <<"===============================================" << endl;
+  std::cout << GridLogMessage << "MOMENTUM SPACE COULOMB GAUGE PROPAGATOR " << endl;
+  std::cout << GridLogMessage <<"===============================================" << endl;
+
+  IVPhotonPropagator<WilsonImplR>::CoulombGaugeMomentumSpace( &phtn_mu_nu[0], min);
+
+  // claude mom space coulomb gauge test here //
+
+  //////////////////////////////////////////////
+  
+
+  std::cout << GridLogMessage <<"===============================================" << endl;
+  std::cout << GridLogMessage << "POSITION SPACE COULOMB GAUGE PROPAGATOR " << endl;
+  std::cout << GridLogMessage <<"===============================================" << endl;
+  
+  IVPhotonPropagator<WilsonImplR>::CoulombGaugePositionSpace( &phtn_mu_nu[0], min);
+
+
+  // claude pos space coulomb gauge test here //
+  
+  //////////////////////////////////////////////
 
   // epilogue
   std::cout << GridLogMessage << "Grid is finalizing now" << std::endl;
