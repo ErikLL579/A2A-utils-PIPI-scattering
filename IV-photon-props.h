@@ -107,13 +107,13 @@ class IVPhotonPropagator
        LatticeCoordinate(coor, mu);
        // (-pi, pi]
        coor = where(coor > RealD(latt_size[mu]/2 - 1), coor - RealD(latt_size[mu]), coor);
-       space_k_sqr = k_sqr + coor * coor * (TwoPiL * TwoPiL);
+       space_k_sqr = space_k_sqr + coor * coor * (TwoPiL * TwoPiL);
      }
 
      // four momentum
-     RealD TwoPiL =  M_PI * 2.0/ latt_size[Nd];
-     LatticeCoordinate(coor, Nd);
-     coor = where(coor > RealD(latt_size[Nd]/2 - 1), coor - RealD(latt_size[Nd]), coor);
+     RealD TwoPiL =  M_PI * 2.0/ latt_size[Nd-1];
+     LatticeCoordinate(coor, Nd-1);
+     coor = where(coor > RealD(latt_size[Nd-1]/2 - 1), coor - RealD(latt_size[Nd-1]), coor);
      k_sqr = space_k_sqr + coor * coor * (TwoPiL * TwoPiL);
 
      LatticeRealD prop(grid);
@@ -135,15 +135,17 @@ class IVPhotonPropagator
      // D_{ij} = (d_{ij} - pi pj / |\vec{p}^2| ) / p^2
      for(int mu=0; mu<Nd-1; mu++) {
        for(int nu=0; nu<Nd-1; nu++) {
-         RealD TwoPiL =  M_PI * 2.0/ latt_size[mu];
+         RealD TwoPiL_mu =  M_PI * 2.0/ latt_size[mu];
+         RealD TwoPiL_nu =  M_PI * 2.0/ latt_size[nu];
          // pi  
          LatticeCoordinate(coor, mu);
          // pj
          LatticeCoordinate(coor2, nu);
          coor = where(coor > RealD(latt_size[mu]/2 - 1), coor - RealD(latt_size[mu]), coor);
-         coor2 = where(coor2 > RealD(latt_size[mu]/2 - 1), coor2 - RealD(latt_size[mu]), coor2);
+         coor2 = where(coor2 > RealD(latt_size[nu]/2 - 1), coor2 - RealD(latt_size[nu]), coor2);
  
-         prop = - coor * coor2 * TwoPiL *TwoPiL;
+         // - pi pj / |vec{p}^2|
+         prop = - coor * coor2 * TwoPiL_mu *TwoPiL_nu / space_k_sqr;
 
          // d_ij
          if(mu == nu) prop = prop + one;
