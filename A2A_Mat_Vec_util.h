@@ -77,7 +77,9 @@ public:
 
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
-                                              TensorType_TraceMomTime &Result,
+                                              TensorType_TraceMomTime &Result_round_1,
+                                              TensorType_TraceMomTime &Result_round_2, // these might have to be changed for different lengths
+                                              int level_1_contraction;
                                               vector<int> &A_vector_contractions,
                                               vector<int> &B_vector_contractions,
                                               vector<int> &C_vector_contractions);
@@ -86,10 +88,30 @@ public:
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
                                               TensorType_TraceMomTime &Result,
+ 					      int level_1_contraction;
                                               vector<int> &A_vector_contractions,
                                               vector<int> &B_vector_contractions,
                                               vector<int> &C_vector_contractions);
 
+
+  // may swap to using these
+  /*
+  template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
+  static void MesonField_to_device(TensorType_mesonfield &Mesonfield,
+                                   deviceVector<ComplexD> &A)
+
+
+  template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
+  static void MesonField_from_device(TensorType_mesonfield &Mesonfield,
+                                     TensorType_TraceMomTime &Result,
+                                     deviceVector<ComplexD* > &Cs);     
+
+
+  static void MesonField_contract(deviceVector<ComplexD* > &As,       
+                                  deviceVector<ComplexD* > &Bs,       
+                                  deviceVector<ComplexD* > &Cs);
+
+  */
 
 
 /*
@@ -248,7 +270,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
   std::cout << GridLogMessage<<"\\\\\\\\\\\\\\\\\\ MATRIX-VECTOR OPERATION COMPLETED \\\\\\\\\\\\\\\\\\\\\\" <<std::endl;
 
-
+// actually just do these with the photon convolutions
 // define vector y_mu (also need to add to function argument)
 // vector<FermionField> y_mu(gammas.size()); 
 /*
@@ -261,11 +283,42 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 */
 };
 
+/*
+  template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
+  void PipiA2Autils<FImpl>::MesonField_to_device(TensorType_mesonfield &Mesonfield,
+                                                 deviceVector<ComplexD> &A)       
+{
+
+  GridBLAS blas;
+    
+  int num_momenta = Mesonfield.dimension(0);
+  int timeslices  = Mesonfield.dimension(1);
+  int Nmodes = Mesonfield.dimension(2);
+    
+  // make sure mesonfield is what I expect
+  GRID_ASSERT(Nmodes == Mesonfield.dimension(3));
+
+
+  const int max_batch_size = 100;
+  
+  // set up memory on device
+  const int Ncomplex = Nmodes * Nmodes * contractions;
+
+  deviceVector<ComplexD> A(Ncomplex); // input vectors
+
+  // need to only upload enough A fields to actually fill this out...
+  acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * contractions * sizeof(ComplexD));
+
+};
+*/
+
+
 
   template<class FImpl>
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
                                                             TensorType_TraceMomTime &Result,
+                                                            int level_1_contraction;
                                                             vector<int> &A_vector_contractions,
                                                             vector<int> &B_vector_contractions,
                                                             vector<int> &C_vector_contractions)
@@ -374,7 +427,9 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   template<class FImpl>
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
-                                                            TensorType_TraceMomTime &Result,
+                                                            TensorType_TraceMomTime &Result_round_1,
+                                                            TensorType_TraceMomTime &Result_round_2, // these might have to be changed for different lengths
+                                                            int level_1_contraction;
                                                             vector<int> &A_vector_contractions,
                                                             vector<int> &B_vector_contractions,
                                                             vector<int> &C_vector_contractions)
@@ -390,6 +445,9 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     int timeslices  = Mesonfield.dimension(1);
     int Nmodes = Mesonfield.dimension(2);
     
+    // total number of pion meson fields stored on device
+    int num_matrices = num_momenta * timeslices;
+
     // make sure mesonfield is what I expect  
     GRID_ASSERT(Nmodes == Mesonfield.dimension(3));
     
@@ -410,53 +468,50 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // ex: 24^3 x 64 ensemble: 64 * 4 * 2 = 312 pion mesonfields per config
   
     // set up memory on device
-    const int Ncomplex = Nmodes * Nmodes * contractions;
+    const int Ncomplex = Nmodes * Nmodes * num_matrices;
                                                             
-    deviceVector<ComplexD> A(Ncomplex); // input vectors
-    deviceVector<ComplexD> C(Ncomplex); // result of matrix operations on device
-    
-    // need to parse the input Eigen matrix appropriately
-    // compute DC pieces at all tsrc
-    
+    deviceVector<ComplexD> A(Ncomplex); // input vectors, holds all pion meson field matrices
+
+    deviceVector<ComplexD> C(Nmodes * Nmodes * level_1_contractions); // result of first round of contractions on device
+
     // Input mesonfield Mpp(i, j, k, l)
     // use Mpp.data() to copy to device => Offset = i*(Nt*Nmodes*Nmodes) + j*(Nmodes*Nmodes) + k*(Nmodes) + l
     
     // need to only upload enough A fields to actually fill this out...
-    acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * contractions * sizeof(ComplexD));
+    acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * num_matrices * sizeof(ComplexD));
     
-    deviceVector<ComplexD* > As(contractions);
+    // need different lengths in levels one and two
+    deviceVector<ComplexD* > As1(level_1_contractions);
     // Same matrices as in As but in the order necessary for the contraction
-    deviceVector<ComplexD* > Bs(contractions);
-    deviceVector<ComplexD* > Cs(contractions);
+    deviceVector<ComplexD* > Bs1(level_1_contractions);
+    deviceVector<ComplexD* > Cs1(level_1_contractions);
 
  // vector of which matrices to contract
-  
-    for(int b=0; b<contractions; b++) {  
+    for(int b=0; b<level_1_contraction; b++) {  
       ComplexD *ptr;
     
       // this needs to be modified in the case that I want to use matrices more than once (which I do)
       // probably need another vector to organize these
       ptr = &A[A_vector_contractions[b] * Nmodes * Nmodes];
-      acceleratorPut(As[b], ptr);             
-  
+      acceleratorPut(As1[b], ptr);             
                                               
       // this is where I need the contractions necessary to craft the appropriate B vector
       ptr = &A[B_vector_contractions[b] * Nmodes * Nmodes];
-      acceleratorPut(Bs[b], ptr);
+      acceleratorPut(Bs1[b], ptr);
                                                             
       ptr = &C[C_vector_contractions[b] * Nmodes * Nmodes];
-      acceleratorPut(Cs[b], ptr);
+      acceleratorPut(Cs1[b], ptr);
     }
                                               
     ComplexD alpha(1.0);
     ComplexD beta(0.0);
-    RealD flops = 8.0 * Nmodes * Nmodes * Nmodes * contractions;
+    RealD flops = 8.0 * Nmodes * Nmodes * Nmodes * level_1_contractions;
     
     RealD t0 = usecond();
     
     // perform the matrix multiplication
     // (check that the matrices are transposed correctly)
-    blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As, Bs, beta, Cs);
+    blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As1, Bs1, beta, Cs1);
     blas.synchronise();
   
     RealD t1 = usecond();
@@ -469,16 +524,43 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "=================================================== " << endl;
     cout << GridLogMessage << "=================================================== " << endl;
 
-    // ======================================================================================================
-    // cant use same ptr for two arguments: blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, Cs, Bs, beta, Cs);
-    // will have to istead mix up the ones that are fed into the arguments
-    // ======================================================================================================
-    /*
-    // (rotated arguments here for illustration)
-    // (check that the matrices are transposed correctly)
-     blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, Cs, As, beta, Bs);
-    blas.synchronise();
+    acceleratorCopyFromDevice(&C[0], Result_round_1.data(), Nmodes * Nmodes * sizeof(ComplexD) * (contractions - level_1_contractions) );
+
+
+    // ========================================================
+    // second round of contractions
+    // ========================================================
+
+    // need different lengths in levels one and two
+    deviceVector<ComplexD* > As2(contractions - level_1_contractions); // again these are the source meson fields
+    deviceVector<ComplexD* > Cs2(contractions - level_1_contractions); // these are the results from the first round of matrices
+
+    deviceVector<ComplexD> results(Nmodes * Nmodes * (contractions - level_1_contractions) ); // needed to hold results in second round
+    deviceVector<ComplexD* > level_2_result_s(contractions - level_1_contractions); // pntrs to results
+
+    for(int b=level_1_contractions; b<contractions; b++) {
+      ComplexD *ptr;
+
+
+      // source meson fields    
+      ptr = &A[A_vector_contractions[b] * Nmodes * Nmodes];
+      acceleratorPut(As2[b], ptr);
     
+      // results from first round of contractions
+      ptr = &C[B_vector_contractions[b] * Nmodes * Nmodes];
+      acceleratorPut(Cs2[b], ptr);
+  
+      // result from second round of contractions
+      ptr = &results[C_vector_contractions[b] * Nmodes * Nmodes];    
+      acceleratorPut(level_2_result_s[b], ptr)
+    }
+
+
+    // (check that the matrices are transposed correctly)
+    blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As2, Cs2, beta, level_2_result_s);
+    blas.synchronise();
+
+    flops = 8.0 * Nmodes * Nmodes * Nmodes * (contractions - level_1_contractions);    
     flops = flops / (t1 - t0) / 1.e3;
 
     cout << GridLogMessage << "=================================================== " << endl;
@@ -489,12 +571,11 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "=================================================== " << endl;
 
 
-    // write out the DC pieces for use in zeroth order diagrams and EM corrections to DC diagram
     cout << GridLogMessage << "COPYING RESULTS TO HOST" << endl;
-    */
 
     //Eigen::Tensor<ComplexD,4, Eigen::RowMajor> c(momenta.size(),Nt,Nmodes,Nmodes);
-    acceleratorCopyFromDevice(&C[0], Result.data(), Nmodes * Nmodes * sizeof(ComplexD) * contractions);
+    // need both products of round 1 and round 2
+    acceleratorCopyFromDevice(&results[0], Result_round_2.data(), Nmodes * Nmodes * sizeof(ComplexD) * (contractions - level_1_contractions) );
 };
 
 
