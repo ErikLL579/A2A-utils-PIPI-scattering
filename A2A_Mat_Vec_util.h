@@ -80,6 +80,7 @@ public:
                                               TensorType_TraceMomTime &Result_round_1,
                                               TensorType_TraceMomTime &Result_round_2, // these might have to be changed for different lengths
                                               int level_1_contraction;
+					      vector<int> & buffer_flag; // True when evaluaring things like Prod_Pi2 * Prod_Pi4 in the second level, false for Prod_Pi1 * Pi(k, tsrc)
                                               vector<int> &A_vector_contractions,
                                               vector<int> &B_vector_contractions,
                                               vector<int> &C_vector_contractions);
@@ -432,6 +433,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
                                                             TensorType_TraceMomTime &Result_round_1,
                                                             TensorType_TraceMomTime &Result_round_2, // these might have to be changed for different lengths
                                                             int level_1_contraction;
+							    vector<int> &buffer_flag_A;
+                                                            vector<int> &buffer_flag_B;
                                                             vector<int> &A_vector_contractions,
                                                             vector<int> &B_vector_contractions,
                                                             vector<int> &C_vector_contractions)
@@ -529,12 +532,14 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "=================================================== " << endl;
     cout << GridLogMessage << "=================================================== " << endl;
 
-    // acceleratorCopyFromDevice(&C[0], Result_round_1.data(), Nmodes * Nmodes * sizeof(ComplexD) * (contractions - level_1_contractions) );
+    acceleratorCopyFromDevice(&C[0], Result_round_1.data(), Nmodes * Nmodes * sizeof(ComplexD) * (contractions - level_1_contractions) );
     
     // ========================================================
     // second round of contractions
     // ========================================================
 
+    // wrap the below in {} so that the device deallocates memory when finished
+    {
     // need different lengths in levels one and two
     deviceVector<ComplexD* > As2(contractions - level_1_contractions); // again these are the source meson fields
     deviceVector<ComplexD* > Cs2(contractions - level_1_contractions); // these are the results from the first round of matrices
@@ -542,21 +547,28 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     deviceVector<ComplexD> results(Nmodes * Nmodes * (contractions - level_1_contractions) ); // needed to hold results in second round
     deviceVector<ComplexD* > level_2_result_s(contractions - level_1_contractions); // pntrs to results
 
-    for(int b=level_1_contractions; b<contractions; b++) {
+
+    // issue is that the below could be either from A or C...
+    for(int b=0; b<contractions- level_1_contractions; b++) {
       ComplexD *ptr;
 
+      // source meson fields
+      if (buffer_flag_A[b] == 0) ptr = &A[A_vector_contractions[b+ level_1_contractions] * Nmodes * Nmodes]; // ex: Prod_Pi2 * Pi(k, tsrc)
+ 
+      else ptr = &C[A_vector_contractions[b + level_1_contractions] * Nmodes * Nmodes]; // ex: Prod_Pi2 * Prod_Pi3
 
-      // source meson fields    
-      ptr = &A[A_vector_contractions[b] * Nmodes * Nmodes];
       acceleratorPut(As2[b], ptr);
     
       // results from first round of contractions
-      ptr = &C[B_vector_contractions[b] * Nmodes * Nmodes];
+      if (buffer_flag_B[b] == 0) ptr = &C[B_vector_contractions[b + level_1_contractions] * Nmodes * Nmodes];
+
+      else ptr = &A[B_vector_contractions[b + level_1_contractions] * Nmodes * Nmodes];
+
       acceleratorPut(Cs2[b], ptr);
   
       // result from second round of contractions
-      ptr = &results[C_vector_contractions[b] * Nmodes * Nmodes];    
-      acceleratorPut(level_2_result_s[b], ptr)
+      ptr = &results[C_vector_contractions[b + level_1_contractions] * Nmodes * Nmodes];    
+      acceleratorPut(level_2_result_s[b], ptr);
     }
 
 
@@ -580,6 +592,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     //Eigen::Tensor<ComplexD,4, Eigen::RowMajor> c(momenta.size(),Nt,Nmodes,Nmodes);
     // need both products of round 1 and round 2
     acceleratorCopyFromDevice(&results[0], Result_round_2.data(), Nmodes * Nmodes * sizeof(ComplexD) * (contractions - level_1_contractions) );
+    }
 };
 
 
