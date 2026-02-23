@@ -80,7 +80,8 @@ public:
                                               TensorType_TraceMomTime &Result_round_1,
                                               TensorType_TraceMomTime &Result_round_2, // these might have to be changed for different lengths
                                               int level_1_contraction;
-					      vector<int> & buffer_flag; // True when evaluaring things like Prod_Pi2 * Prod_Pi4 in the second level, false for Prod_Pi1 * Pi(k, tsrc)
+					      vector<int> & buffer_flag_A; // True when evaluaring things like Prod_Pi2 * Prod_Pi4 in the second level, false for Prod_Pi1 * Pi(k, tsrc)
+					      vector<int> & buffer_flag_B;
                                               vector<int> &A_vector_contractions,
                                               vector<int> &B_vector_contractions,
                                               vector<int> &C_vector_contractions);
