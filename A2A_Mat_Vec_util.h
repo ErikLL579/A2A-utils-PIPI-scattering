@@ -367,7 +367,9 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
     // need to only upload enough A fields to actually fill this out...
     acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * contractions * sizeof(ComplexD));
-
+  
+    // wrapping this bit in {} so that As, Bs and Cs get automatically deallocated when they are no longer needed.
+    {
     deviceVector<ComplexD* > As(contractions);
     // Same matrices as in As but in the order necessary for the contraction
     deviceVector<ComplexD* > Bs(contractions);
@@ -402,6 +404,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // (check that the matrices are transposed correctly)
     blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As, Bs, beta, Cs);
     blas.synchronise();
+    }
 
     RealD t1 = usecond();
     flops = flops / (t1 - t0) / 1.e3;
@@ -479,7 +482,9 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     
     // need to only upload enough A fields to actually fill this out...
     acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * num_matrices * sizeof(ComplexD));
-    
+   
+    // wrapping this part in {} so that As1, Bs1 and Cs1 are automatically deallocaed when I finish with them
+    { 
     // need different lengths in levels one and two
     deviceVector<ComplexD* > As1(level_1_contractions);
     // Same matrices as in As but in the order necessary for the contraction
@@ -513,7 +518,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // (check that the matrices are transposed correctly)
     blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As1, Bs1, beta, Cs1);
     blas.synchronise();
-  
+    }  
+
     RealD t1 = usecond();
     flops = flops / (t1 - t0) / 1.e3;
 
@@ -524,8 +530,11 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "=================================================== " << endl;
     cout << GridLogMessage << "=================================================== " << endl;
 
-    acceleratorCopyFromDevice(&C[0], Result_round_1.data(), Nmodes * Nmodes * sizeof(ComplexD) * (contractions - level_1_contractions) );
-
+    // acceleratorCopyFromDevice(&C[0], Result_round_1.data(), Nmodes * Nmodes * sizeof(ComplexD) * (contractions - level_1_contractions) );
+    
+    acceleratorFreeDevice(&As1[0]);
+    acceleratorFreeDevice(&Bs1[0]);
+    acceleratorFreeDevice(&Cs1[0]);
 
     // ========================================================
     // second round of contractions
