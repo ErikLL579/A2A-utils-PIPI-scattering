@@ -385,7 +385,6 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
       ptr = &A[A_vector_contractions[b] * Nmodes * Nmodes];
       acceleratorPut(As[b], ptr);
       
-
       // this is where I need the contractions necessary to craft the appropriate B vector
       ptr = &A[B_vector_contractions[b] * Nmodes * Nmodes];
       acceleratorPut(Bs[b], ptr);
@@ -532,10 +531,6 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
     // acceleratorCopyFromDevice(&C[0], Result_round_1.data(), Nmodes * Nmodes * sizeof(ComplexD) * (contractions - level_1_contractions) );
     
-    acceleratorFreeDevice(&As1[0]);
-    acceleratorFreeDevice(&Bs1[0]);
-    acceleratorFreeDevice(&Cs1[0]);
-
     // ========================================================
     // second round of contractions
     // ========================================================
