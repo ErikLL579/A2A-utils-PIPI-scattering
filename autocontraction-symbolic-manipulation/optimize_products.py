@@ -171,6 +171,31 @@ def combined_position(pos_a: Optional[str], pos_b: Optional[str]) -> Optional[st
     return pos_b
 
 
+def get_element_gamma(elem: str,
+                      product_gammas: Dict[str, Optional[str]]) -> Optional[str]:
+    """
+    Get the gamma label (e.g. 'mu', 'nu') of an element, or None.
+
+    - gamma_mu |v>(x_1) -> 'mu'
+    - gamma_nu |v>(x_2) -> 'nu'
+    - Product names are looked up in the product_gammas dict
+    - Everything else (Pi, <w|, prod_Pi) -> None
+    """
+    if elem in product_gammas:
+        return product_gammas[elem]
+    match = re.match(r'gamma_(\w+)\s+\|v>', elem)
+    if match:
+        return match.group(1)
+    return None
+
+
+def combined_gamma(gamma_a: Optional[str], gamma_b: Optional[str]) -> Optional[str]:
+    """Get the gamma label of a product of two elements."""
+    if gamma_a is not None:
+        return gamma_a
+    return gamma_b
+
+
 def make_pair_key(a: str, b: str) -> str:
     """Create a string key for an adjacent pair."""
     return f"{a} . {b}"
@@ -296,6 +321,7 @@ def optimize_phase2(terms, product_positions: Dict[str, Optional[str]]):
     Returns (terms, product_defs)
     """
     product_defs = []
+    product_gammas = {}
     counter = 0
     level = 0
 
@@ -316,14 +342,21 @@ def optimize_phase2(terms, product_positions: Dict[str, Optional[str]]):
             pos_b = get_element_position(b, product_positions)
             position = combined_position(pos_a, pos_b)
 
-            # Include position in the product name
+            # Determine gamma label of this product
+            gamma_a = get_element_gamma(a, product_gammas)
+            gamma_b = get_element_gamma(b, product_gammas)
+            gamma = combined_gamma(gamma_a, gamma_b)
+            gamma_suffix = f"_{gamma}" if gamma else ""
+
+            # Include gamma label and position in the product name
             if position:
-                prod_name = f"prod_vec{counter}({position})"
+                prod_name = f"prod_vec{counter}{gamma_suffix}({position})"
             else:
-                prod_name = f"prod_vec{counter}"
+                prod_name = f"prod_vec{counter}{gamma_suffix}"
 
             product_names[pair_key] = prod_name
             product_positions[prod_name] = position
+            product_gammas[prod_name] = gamma
 
         terms = apply_substitution_to_terms(terms, product_names)
         product_defs.append((level, product_names,

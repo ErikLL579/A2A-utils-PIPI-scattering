@@ -4,8 +4,10 @@
 # Tr[...] denotes trace over A2A indices
 #
 # Optimization order (compute in this order):
-#   1. prod_Pi products  — matrix-matrix (Pi chain) products (cheap)
-#   2. prod_vec products — vector-matrix products involving <w| and |v> (expensive)
+#   1. prod_Pi products  — matrix-matrix (Pi chain) products (cheap, position-free)
+#   2. prod_vec products — vector-matrix products (expensive, position-local)
+#      Products carry their position: prod_vecN(x_1) lives at x_1
+#      Products at different positions are NEVER combined
 #   3. Term assembly     — combine products into final traces
 #
 # Momentum conventions:
