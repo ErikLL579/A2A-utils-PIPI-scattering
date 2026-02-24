@@ -172,6 +172,172 @@ def parse_phase3(filepath):
     return terms
 
 
+# =========================================================
+# Index resolution: map symbolic labels to flat buffer indices
+# =========================================================
+
+def momentum_time_index_to_flattened_index(p, t, Nmodes, Nt):
+    return p * Nt * Nmodes * Nmodes + t * Nmodes * Nmodes
+
+
+def make_momentum_map(p, min_p, k, min_k):
+    return {
+        'p': p,
+        '-p': min_p,
+        'k': k,
+        '-k': min_k
+    }
+
+
+def make_time_map(tsrc, tsnk, Delta):
+    return {
+        't_src': tsrc,
+        't_snk': tsnk,
+        't_src + Delta': tsrc + Delta,
+        't_snk + Delta': tsnk + Delta
+    }
+
+
+def level1_to_contractions(momenta_set, time_set, level1, Nmodes, Nt,
+                           Ac={}, Bc={}, Cc={}):
+    """Resolve Level 1 products to flat buffer indices for batched BLAS.
+
+    Args:
+        momenta_set: [p, -p, k, -k] buffer indices
+        time_set: [tsrc, tsnk, Delta] numerical values
+        level1: parsed Level 1 dict from parse_phase1
+        Nmodes: number of A2A modes
+        Nt: number of time slices
+        Ac, Bc, Cc: accumulator dicts from previous calls
+
+    Returns [Ac, Bc, Cc] where:
+        Ac: {(momentum, time): flat_index} for left operands
+        Bc: {(momentum, time): flat_index} for right operands
+        Cc: {(prod_name, left_mom, left_t, right_mom, right_t): sequential_index}
+    """
+    Aadd = {}
+    Badd = {}
+    Cadd = {}
+
+    momenta_map = make_momentum_map(momenta_set[0], momenta_set[1], momenta_set[2], momenta_set[3])
+    time_map = make_time_map(time_set[0], time_set[1], time_set[2])
+
+    for n, i in enumerate(level1):
+        momentum = momenta_map[level1[i]['left']['momentum']]
+        time = time_map[level1[i]['left']['time']]
+
+        key = (level1[i]['left']['momentum'], level1[i]['left']['time'])
+        Aadd[key] = momentum_time_index_to_flattened_index(momentum, time, Nmodes, Nt)
+
+        momentum = momenta_map[level1[i]['right']['momentum']]
+        time = time_map[level1[i]['right']['time']]
+
+        key = (level1[i]['right']['momentum'], level1[i]['right']['time'])
+        Badd[key] = momentum_time_index_to_flattened_index(momentum, time, Nmodes, Nt)
+
+        key = (i, level1[i]['left']['momentum'], level1[i]['left']['time'],
+               level1[i]['right']['momentum'], level1[i]['right']['time'])
+        Cadd[key] = n
+
+    Ac |= Aadd
+    Bc |= Badd
+    Cc |= Cadd
+
+    return [Ac, Bc, Cc]
+
+
+def level2_to_contractions(momenta_set, time_set, level1, level2, terms, Nmodes, Nt, Cc):
+    """Resolve Level 2 contractions from both:
+      1. Explicit level2 dict from parse_phase1 (EM case)
+      2. Connected traces in Phase 3 terms with 2 product operands (zeroth order case)
+
+    Returns [Aadd, Badd, flag_A, flag_B, Cadd]
+      - Aadd/Badd: dict of {(name, 'left'/'right', mom_labels...) : buffer_index}
+      - flag_A/flag_B: list of ints (0 = source A buffer, 1 = Level 1 result C buffer)
+      - Cadd: dict mapping (name, left_labels..., right_labels...) to sequential Level 2 result index
+    """
+    Aadd = {}
+    Badd = {}
+    flag_A = []
+    flag_B = []
+    Cadd = {}
+
+    momenta_map = make_momentum_map(momenta_set[0], momenta_set[1], momenta_set[2], momenta_set[3])
+    time_map = make_time_map(time_set[0], time_set[1], time_set[2])
+
+    # Build name -> C buffer index lookup from Cc
+    cc_by_name = {key[0]: val for key, val in Cc.items()}
+
+    def operand_labels(op):
+        """Return a tuple of momentum/time labels for an operand.
+        For a source: (momentum, time)
+        For a product ref: look up in level1 to get (left_mom, left_time, right_mom, right_time)
+        """
+        if op['type'] == 'source':
+            return (op['momentum'], op['time'])
+        else:
+            ref = op['ref']
+            if ref in level1:
+                L = level1[ref]['left']
+                R = level1[ref]['right']
+                return (L['momentum'], L['time'], R['momentum'], R['time'])
+            else:
+                return (ref,)
+
+    # Collect all Level 2 products to compute
+    products = {}
+
+    # 1. Explicit Level 2 products (EM case)
+    for name, product in level2.items():
+        products[name] = product
+
+    # 2. Connected traces from Phase 3 (traces with 2 product operands)
+    for term_name, term in terms.items():
+        for trace in term['traces']:
+            if len(trace) == 2 and trace[0]['type'] == 'product' and trace[1]['type'] == 'product':
+                pair = (trace[0]['ref'], trace[1]['ref'])
+                already_exists = any(
+                    p['left'].get('ref') == pair[0] and p['right'].get('ref') == pair[1]
+                    for p in products.values()
+                )
+                if not already_exists:
+                    synth_name = f"{pair[0]}.{pair[1]}"
+                    products[synth_name] = {'left': trace[0], 'right': trace[1]}
+
+    # Resolve each product
+    for n, (name, product) in enumerate(products.items()):
+        left = product['left']
+        right = product['right']
+
+        # Left operand — key includes resolved momentum/time labels
+        a_key = (name, 'left') + operand_labels(left)
+        if left['type'] == 'product':
+            Aadd[a_key] = cc_by_name[left['ref']]
+            flag_A.append(1)
+        else:
+            momentum = momenta_map[left['momentum']]
+            time = time_map[left['time']]
+            Aadd[a_key] = momentum_time_index_to_flattened_index(momentum, time, Nmodes, Nt)
+            flag_A.append(0)
+
+        # Right operand — key includes resolved momentum/time labels
+        b_key = (name, 'right') + operand_labels(right)
+        if right['type'] == 'product':
+            Badd[b_key] = cc_by_name[right['ref']]
+            flag_B.append(1)
+        else:
+            momentum = momenta_map[right['momentum']]
+            time = time_map[right['time']]
+            Badd[b_key] = momentum_time_index_to_flattened_index(momentum, time, Nmodes, Nt)
+            flag_B.append(0)
+
+        # Descriptive Cadd key: (name, left_labels..., right_labels...)
+        c_key = (name,) + operand_labels(left) + operand_labels(right)
+        Cadd[c_key] = n
+
+    return [Aadd, Badd, flag_A, flag_B, Cadd]
+
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print(f"Usage: python3 {sys.argv[0]} <optimized_file.txt>")

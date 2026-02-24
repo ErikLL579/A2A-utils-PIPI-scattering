@@ -46,7 +46,7 @@ python3 autocontraction-symbolic-manipulation/optimize_products.py <name>_mom.tx
 
 - **`A2A_Mat_Vec_util.h`** — Core header defining `PipiA2Autils<FImpl>` class (templated on fermion implementation). Contains:
   - `ContractMesonFieldAndVector`: Matrix-vector contraction producing fermion field with one outstanding A2A index
-  - `MesonField_MesonField_connected/disconnected`: Batched BLAS trace operations Tr(Pi·Pi) for connected/disconnected diagrams with two-level contraction support
+  - `MesonField_MesonField_connected/disconnected`: Batched BLAS trace operations Tr(Pi·Pi) for connected/disconnected diagrams with two-level contraction support. Level 2 uses per-operand `buffer_flag_A`/`buffer_flag_B` vectors (0 = source buffer `A`, 1 = Level 1 result buffer `C`) to handle mixed and C×C products.
   - `FFT_type1_prod/convolve`: FFT-based contraction strategies (see Appendix B/C of notes)
   - `FFT_type2_contract_convolve`: Combined contraction and convolution with photon propagator
   - Custom lattice types: `LatticeVecSpinMatrix`, `LatticeVecComplex` using `A2Ablocking=8`
@@ -74,13 +74,15 @@ Transforms Wick contraction output (from Luchang's qlat autocontraction) into A2
    - `'type': 'source'` — an original meson field `Pi(momentum, time)` (lives in GPU `A` buffer)
    - `'type': 'product'` — a reference to a Level 1 result (lives in GPU `C` buffer)
 2. **Phase 3** (`parse_phase3`): Parses term assembly lines into dicts of `{'coef': str, 'traces': [[operand_dicts]]}`. Disconnected diagrams (ADT1) have multiple traces; connected (ADT2) have one trace with multiple operands.
-3. **Index resolution** (notebook, `level1_to_contractions`): Maps symbolic labels to flat buffer indices:
+3. **Index resolution** (`level1_to_contractions`, `level2_to_contractions` in `parse_contractions.py`): Maps symbolic labels to flat buffer indices:
    - `mom_map`: `{'p': p_idx, '-p': neg_p_idx, 'k': k_idx, '-k': neg_k_idx}`
    - `time_map`: `{'t_src': t_src, 't_src + Delta': (t_src+Delta)%Nt, ...}`
    - `flat_index = p * Nt * Nmodes^2 + t * Nmodes^2`
-4. Resolved indices fill `vector<int> A_vec, B_vec, C_vec` for `MesonField_MesonField_connected`
+   - Level 1: Returns `[Ac, Bc, Cc]` dicts with tuple keys `(momentum, time)` for A/B and `(prod_name, left_mom, left_time, right_mom, right_time)` for C
+   - Level 2: Returns `[Aadd, Badd, flag_A, flag_B, Cadd]` — handles both explicit Level 2 products (EM) and connected traces from Phase 3 (zeroth order). Uses per-operand buffer flags (0 = source A buffer, 1 = Level 1 result C buffer). All three dicts (Aadd, Badd, Cadd) use `operand_labels()` to resolve product refs back through Level 1 into `(momentum, time, ...)` tuples, so keys are consistent across A/B/C.
+4. Resolved indices fill `vector<int> A_vec, B_vec, C_vec` and `buffer_flag_A/B` for `MesonField_MesonField_connected`
 
-**Known issue:** `MesonField_MesonField_connected` Level 2 currently assumes one operand from `A` buffer and one from `C` buffer, but some Level 2 products (e.g., `prod_Pi10 = prod_Pi1 . prod_Pi6`) have both operands from `C` buffer. Needs fix.
+**Resolved:** `MesonField_MesonField_connected` Level 2 now uses `buffer_flag_A`/`buffer_flag_B` vectors to select between source (`A`) and Level 1 result (`C`) buffers per operand, handling both mixed (A×C) and C×C products.
 
 ## Key Physics Conventions
 
