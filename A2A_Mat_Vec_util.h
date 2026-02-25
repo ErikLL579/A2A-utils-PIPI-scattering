@@ -97,12 +97,13 @@ public:
 
 
   // may swap to using these
-  /*
+  
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_to_device(TensorType_mesonfield &Mesonfield,
                                    deviceVector<ComplexD> &A)
 
 
+  /*
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_from_device(TensorType_mesonfield &Mesonfield,
                                      TensorType_TraceMomTime &Result,
@@ -285,7 +286,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 */
 };
 
-/*
+
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_to_device(TensorType_mesonfield &Mesonfield,
                                                  deviceVector<ComplexD> &A)       
@@ -300,19 +301,17 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   // make sure mesonfield is what I expect
   GRID_ASSERT(Nmodes == Mesonfield.dimension(3));
 
-
   const int max_batch_size = 100;
   
   // set up memory on device
   const int Ncomplex = Nmodes * Nmodes * contractions;
 
-  deviceVector<ComplexD> A(Ncomplex); // input vectors
+  // deviceVector<ComplexD> A(Ncomplex); // input vectors
 
   // need to only upload enough A fields to actually fill this out...
   acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * contractions * sizeof(ComplexD));
 
 };
-*/
 
 
 
