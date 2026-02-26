@@ -362,7 +362,334 @@ def optimize_phase2(terms, product_positions: Dict[str, Optional[str]]):
         product_defs.append((level, product_names,
                              {k: pair_counts[k] for k in product_names}))
 
-    return terms, product_defs
+    return terms, product_defs, product_gammas
+
+
+# =============================================================================
+# Phase 2 deduplication: merge products differing only by position/gamma
+# =============================================================================
+
+def _canonicalize_element(elem: str, old_to_canonical: Dict[str, str]) -> str:
+    """Strip position and gamma label from an element for deduplication.
+
+    <w|(x_1) -> <w|
+    gamma_mu |v>(x_1) -> gamma |v>
+    prod_vec7_mu(x_1) -> lookup canonical name
+    Pi(...), prod_PiN -> unchanged
+    """
+    # <w|(x_N) -> <w|
+    if re.match(r'<w\|\(x_\d+\)', elem):
+        return '<w|'
+    # gamma_X |v>(x_N) -> gamma |v>
+    if re.match(r'gamma_\w+\s+\|v>\(x_\d+\)', elem):
+        return 'gamma |v>'
+    # prod_vec reference: look up canonical name
+    if elem in old_to_canonical:
+        return old_to_canonical[elem]
+    # Pi(...), prod_PiN -> unchanged
+    return elem
+
+
+def _canonicalize_pair_key(pair_key: str, old_to_canonical: Dict[str, str]) -> str:
+    """Canonicalize a pair key by stripping position/gamma from both sides."""
+    parts = pair_key.split(' . ', 1)
+    return ' . '.join(_canonicalize_element(p.strip(), old_to_canonical)
+                      for p in parts)
+
+
+def _rewrite_term_element(elem: str,
+                          old_to_canonical: Dict[str, str],
+                          old_name_info: Dict[str, tuple]) -> str:
+    """Rewrite a prod_vec reference with canonical name, re-attaching position/gamma.
+
+    Raw elements (<w|(x_1), gamma_mu |v>(x_1), Pi(...), prod_PiN) pass through.
+    """
+    if elem in old_to_canonical:
+        canonical = old_to_canonical[elem]
+        pos, gamma = old_name_info[elem]
+        # Strip canonical _mu suffix before re-attaching actual gamma label
+        base_name = re.sub(r'_mu$', '', canonical)
+        gamma_suffix = f"_{gamma}" if gamma else ""
+        pos_suffix = f"({pos})" if pos else ""
+        return f"{base_name}{gamma_suffix}{pos_suffix}"
+    return elem
+
+
+def deduplicate_phase2(phase2_defs, terms,
+                       product_positions: Dict[str, Optional[str]],
+                       product_gammas: Dict[str, Optional[str]]):
+    """Merge Phase 2 products that differ only by position (x_1/x_2)
+    and gamma label (mu/nu).
+
+    Definitions become position/gamma-free; position and gamma are
+    re-attached in the term assembly lines.
+
+    Returns (new_phase2_defs, new_terms).
+    """
+    old_to_canonical = {}   # full old name -> canonical base name
+    old_name_info = {}      # full old name -> (position, gamma)
+
+    new_phase2_defs = []
+    counter = 0
+
+    for level, product_names, pair_counts in phase2_defs:
+        canonical_groups = OrderedDict()  # canonical_def -> [(pair_key, prod_name)]
+
+        for pair_key, prod_name in product_names.items():
+            pos = product_positions.get(prod_name)
+            gamma = product_gammas.get(prod_name)
+            old_name_info[prod_name] = (pos, gamma)
+
+            canon_key = _canonicalize_pair_key(pair_key, old_to_canonical)
+
+            if canon_key not in canonical_groups:
+                canonical_groups[canon_key] = []
+            canonical_groups[canon_key].append((pair_key, prod_name))
+
+        new_product_names = OrderedDict()
+        new_pair_counts = {}
+
+        for canon_key, members in canonical_groups.items():
+            counter += 1
+            # Check if any member has gamma — if so, use _mu in canonical name
+            has_gamma = any(product_gammas.get(old_name) is not None
+                           for _, old_name in members)
+            canonical_name = f"prod_vec{counter}" + ("_mu" if has_gamma else "")
+            # Display key: restore gamma_mu label in definitions
+            display_key = (canon_key.replace('gamma |v>', 'gamma_mu |v>')
+                           if has_gamma else canon_key)
+
+            total_count = sum(pair_counts[pk] for pk, _ in members)
+            new_product_names[display_key] = canonical_name
+            new_pair_counts[display_key] = total_count
+
+            for _, old_name in members:
+                old_to_canonical[old_name] = canonical_name
+
+        new_phase2_defs.append((level, new_product_names, new_pair_counts))
+
+    # Rewrite terms
+    new_terms = []
+    for name, coef, traces in terms:
+        new_traces = []
+        for trace_str, elements in traces:
+            new_elements = [_rewrite_term_element(e, old_to_canonical, old_name_info)
+                            for e in elements]
+            new_traces.append((trace_str, new_elements))
+        new_terms.append((name, coef, new_traces))
+
+    return new_phase2_defs, new_terms
+
+
+def _is_bare_matrix(elem: str) -> bool:
+    """Check if element is a bare matrix (Pi field or prod_Pi), not a vector or prod_vec."""
+    return elem.startswith("Pi(") or re.match(r'prod_Pi\d+$', elem) is not None
+
+
+def _absorb_bare_matrices(phase2_defs, terms, product_positions, product_gammas):
+    """Absorb bare matrices adjacent to gamma |v> in connected traces.
+
+    For each gamma_X |v>(pos) . bare_matrix pair:
+      Step 1: Create gamma_mu |v> . bare_matrix as a new Phase 2 product
+      Step 2: Create <w| . new_product as a Level 2 product (bra attaches)
+
+    Returns (phase2_defs, terms).
+    """
+    max_num = 0
+    for level, product_names, _ in phase2_defs:
+        for _, prod_name in product_names.items():
+            m = re.match(r'prod_vec(\d+)', prod_name)
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+    counter = max_num
+
+    existing_levels = [level for level, _, _ in phase2_defs]
+    next_level = max(existing_levels) + 1 if existing_levels else 1
+
+    # ---- Step 1: gamma_X |v>(pos) . bare_matrix → new prod_vec ----
+
+    pair_counts = {}
+    pair_info = {}
+
+    for name, coef, traces in terms:
+        for trace_str, elements in traces:
+            if len(elements) <= 1:
+                continue
+            for i in range(len(elements) - 1):
+                a, b = elements[i], elements[i + 1]
+                a_match = re.match(r'gamma_(\w+)\s+\|v>\((x_\d+)\)', a)
+                if a_match and _is_bare_matrix(b):
+                    pair_key = make_pair_key(a, b)
+                    pair_counts[pair_key] = pair_counts.get(pair_key, 0) + 1
+                    pair_info[pair_key] = (a_match.group(2), a_match.group(1))
+
+    if not pair_counts:
+        return phase2_defs, terms
+
+    # Group by canonical form (strip position/gamma from gamma |v>)
+    canonical_groups = OrderedDict()
+    for pair_key in sorted(pair_counts.keys()):
+        bare = pair_key.split(' . ', 1)[1].strip()
+        canon_key = f"gamma_mu |v> . {bare}"
+        if canon_key not in canonical_groups:
+            canonical_groups[canon_key] = []
+        canonical_groups[canon_key].append(pair_key)
+
+    product_map = {}
+    new_L1_names = OrderedDict()
+    new_L1_counts = {}
+    l1_full_to_canonical = {}
+
+    for canon_key, member_keys in canonical_groups.items():
+        counter += 1
+        canonical_name = f"prod_vec{counter}_mu"
+        base_name = f"prod_vec{counter}"
+
+        total_count = sum(pair_counts[pk] for pk in member_keys)
+        new_L1_names[canon_key] = canonical_name
+        new_L1_counts[canon_key] = total_count
+
+        for pk in member_keys:
+            pos, gamma = pair_info[pk]
+            sub_name = f"{base_name}_{gamma}({pos})"
+            product_map[pk] = sub_name
+            product_positions[sub_name] = pos
+            product_gammas[sub_name] = gamma
+            l1_full_to_canonical[sub_name] = canonical_name
+
+    terms = apply_substitution_to_terms(terms, product_map)
+
+    # ---- Step 2: <w|(pos) . new_prod(pos) → Level 2 prod_vec ----
+
+    pair_counts2 = {}
+    pair_info2 = {}
+
+    for name, coef, traces in terms:
+        for trace_str, elements in traces:
+            if len(elements) <= 1:
+                continue
+            for i in range(len(elements) - 1):
+                a, b = elements[i], elements[i + 1]
+                a_match = re.match(r'<w\|\((x_\d+)\)', a)
+                if not a_match:
+                    continue
+                if b not in l1_full_to_canonical:
+                    continue
+                pos_a = a_match.group(1)
+                pos_b = product_positions.get(b)
+                if pos_a != pos_b:
+                    continue
+                pair_key = make_pair_key(a, b)
+                pair_counts2[pair_key] = pair_counts2.get(pair_key, 0) + 1
+                pair_info2[pair_key] = (pos_a, product_gammas.get(b))
+
+    if not pair_counts2:
+        phase2_defs = list(phase2_defs) + [(next_level, new_L1_names, new_L1_counts)]
+        return phase2_defs, terms
+
+    canonical_groups2 = OrderedDict()
+    for pair_key in sorted(pair_counts2.keys()):
+        b_part = pair_key.split(' . ', 1)[1].strip()
+        b_canon = l1_full_to_canonical[b_part]
+        canon_key = f"<w| . {b_canon}"
+        if canon_key not in canonical_groups2:
+            canonical_groups2[canon_key] = []
+        canonical_groups2[canon_key].append(pair_key)
+
+    product_map2 = {}
+    new_L2_names = OrderedDict()
+    new_L2_counts = {}
+
+    for canon_key, member_keys in canonical_groups2.items():
+        counter += 1
+        canonical_name = f"prod_vec{counter}_mu"
+        base_name = f"prod_vec{counter}"
+
+        total_count = sum(pair_counts2[pk] for pk in member_keys)
+        new_L2_names[canon_key] = canonical_name
+        new_L2_counts[canon_key] = total_count
+
+        for pk in member_keys:
+            pos, gamma = pair_info2[pk]
+            sub_name = f"{base_name}_{gamma}({pos})"
+            product_map2[pk] = sub_name
+            product_positions[sub_name] = pos
+            product_gammas[sub_name] = gamma
+
+    terms = apply_substitution_to_terms(terms, product_map2)
+
+    phase2_defs = list(phase2_defs) + [
+        (next_level, new_L1_names, new_L1_counts),
+        (next_level + 1, new_L2_names, new_L2_counts),
+    ]
+
+    return phase2_defs, terms
+
+
+def _create_current_vertex_product(phase2_defs, terms):
+    """Factor out remaining <w|(pos) . gamma_X |v>(pos) pairs as a single
+    canonical product (the current vertex). Added as a new Phase 2 level.
+
+    Returns (phase2_defs, terms).
+    """
+    # Count occurrences
+    pattern_count = 0
+    for name, coef, traces in terms:
+        for trace_str, elements in traces:
+            for i in range(len(elements) - 1):
+                a, b = elements[i], elements[i + 1]
+                a_match = re.match(r'<w\|\((x_\d+)\)', a)
+                b_match = re.match(r'gamma_(\w+)\s+\|v>\((x_\d+)\)', b)
+                if a_match and b_match and a_match.group(1) == b_match.group(2):
+                    pattern_count += 1
+
+    if pattern_count < 2:
+        return phase2_defs, terms
+
+    # Find the next prod_vec number
+    max_num = 0
+    for level, product_names, pair_counts in phase2_defs:
+        for canon_key, prod_name in product_names.items():
+            m = re.match(r'prod_vec(\d+)', prod_name)
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+
+    canonical_name = f"prod_vec{max_num + 1}_mu"
+    canon_key = "<w| . gamma_mu |v>"
+
+    new_product_names = OrderedDict()
+    new_product_names[canon_key] = canonical_name
+    new_pair_counts = {canon_key: pattern_count}
+
+    existing_levels = [level for level, _, _ in phase2_defs]
+    new_level = max(existing_levels) + 1 if existing_levels else 1
+    phase2_defs = list(phase2_defs) + [(new_level, new_product_names, new_pair_counts)]
+
+    # Substitute in terms
+    new_terms = []
+    for name, coef, traces in terms:
+        new_traces = []
+        for trace_str, elements in traces:
+            new_elements = []
+            i = 0
+            while i < len(elements):
+                if i < len(elements) - 1:
+                    a, b = elements[i], elements[i + 1]
+                    a_match = re.match(r'<w\|\((x_\d+)\)', a)
+                    b_match = re.match(r'gamma_(\w+)\s+\|v>\((x_\d+)\)', b)
+                    if a_match and b_match and a_match.group(1) == b_match.group(2):
+                        pos = a_match.group(1)
+                        gamma = b_match.group(1)
+                        base_name = re.sub(r'_mu$', '', canonical_name)
+                        new_elements.append(f"{base_name}_{gamma}({pos})")
+                        i += 2
+                        continue
+                new_elements.append(elements[i])
+                i += 1
+            new_traces.append((trace_str, new_elements))
+        new_terms.append((name, coef, new_traces))
+
+    return phase2_defs, new_terms
 
 
 def optimize(terms):
@@ -370,12 +697,19 @@ def optimize(terms):
     Two-phase optimization:
       Phase 1: Matrix-matrix products only (Pi chains) — cheap, position-free
       Phase 2: Vector-matrix products — expensive, position-local only
+      Dedup: Merge Phase 2 products differing only by position/gamma
+      Current vertex: Factor out remaining <w| . gamma |v> pairs
 
     Returns:
         (terms, phase1_defs, phase2_defs)
     """
     terms, phase1_defs, product_positions = optimize_phase1(terms)
-    terms, phase2_defs = optimize_phase2(terms, product_positions)
+    terms, phase2_defs, product_gammas = optimize_phase2(terms, product_positions)
+    phase2_defs, terms = deduplicate_phase2(phase2_defs, terms,
+                                            product_positions, product_gammas)
+    phase2_defs, terms = _absorb_bare_matrices(phase2_defs, terms,
+                                               product_positions, product_gammas)
+    phase2_defs, terms = _create_current_vertex_product(phase2_defs, terms)
     return terms, phase1_defs, phase2_defs
 
 
@@ -393,9 +727,9 @@ def write_optimized_output(output_path: str, terms, phase1_defs, phase2_defs):
         f.write("#\n")
         f.write("# Optimization order (compute in this order):\n")
         f.write("#   1. prod_Pi products  — matrix-matrix (Pi chain) products (cheap, position-free)\n")
-        f.write("#   2. prod_vec products — vector-matrix products (expensive, position-local)\n")
-        f.write("#      Products carry their position: prod_vecN(x_1) lives at x_1\n")
-        f.write("#      Products at different positions are NEVER combined\n")
+        f.write("#   2. prod_vec products — vector-matrix products (position/gamma-independent)\n")
+        f.write("#      Definitions are stripped of position (x_1/x_2) and gamma (mu/nu)\n")
+        f.write("#      Position and gamma are re-attached in Phase 3 term assembly\n")
         f.write("#   3. Term assembly     — combine products into final traces\n")
         f.write("#\n")
         f.write("# Momentum conventions:\n")
@@ -422,7 +756,7 @@ def write_optimized_output(output_path: str, terms, phase1_defs, phase2_defs):
         # Phase 2 products
         if phase2_defs:
             f.write("# =========================================================\n")
-            f.write("# Phase 2: Vector-matrix products (position-local)\n")
+            f.write("# Phase 2: Vector-matrix products (position/gamma-independent)\n")
             f.write("# =========================================================\n")
             for level, product_names, pair_counts in phase2_defs:
                 f.write(f"#\n")
@@ -491,7 +825,7 @@ def main():
         print(f"  Level {level}: {len(product_names)} products")
         for pair_key, prod_name in product_names.items():
             print(f"    {prod_name} ({pair_counts[pair_key]}x): {pair_key}")
-    print(f"\nPhase 2 (vector-matrix, position-local): {p2_total} products in {len(phase2_defs)} level(s)")
+    print(f"\nPhase 2 (vector-matrix, position/gamma-independent): {p2_total} products in {len(phase2_defs)} level(s)")
     for level, product_names, pair_counts in phase2_defs:
         print(f"  Level {level}: {len(product_names)} products")
         for pair_key, prod_name in product_names.items():

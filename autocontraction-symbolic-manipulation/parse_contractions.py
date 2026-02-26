@@ -1,6 +1,6 @@
 """
-Parse *_mom_optimized.txt files and extract Phase 1 (matrix-matrix)
-product definitions and Phase 3 (term assembly) into structured Python dicts.
+Parse *_mom_optimized.txt files and extract Phase 1 (matrix-matrix),
+Phase 2 (vector-matrix), and Phase 3 (term assembly) into structured Python dicts.
 
 Usage:
     python3 parse_contractions.py I2_pipi_cexpr_mom_optimized.txt
@@ -13,12 +13,15 @@ from pprint import pprint
 
 
 def parse_pi_operand(text):
-    """Parse a single operand like 'Pi(-k, t_snk + Delta)' or 'prod_Pi3'.
+    """Parse a single operand in a trace.
 
-    Returns a dict. For a Pi field:
-        {'type': 'source', 'momentum': '-k', 'time': 't_snk + Delta'}
-    For a reference to another product:
-        {'type': 'product', 'ref': 'prod_Pi3'}
+    Returns a dict:
+      Pi(-k, t_snk + Delta)     -> {'type': 'source', 'momentum': '-k', 'time': 't_snk + Delta'}
+      prod_Pi3                  -> {'type': 'product', 'ref': 'prod_Pi3'}
+      prod_vec34_mu(x_1)        -> {'type': 'vec_product', 'ref': 'prod_vec34',
+                                    'gamma': 'mu', 'position': 'x_1'}
+      prod_vec1(x_2)            -> {'type': 'vec_product', 'ref': 'prod_vec1',
+                                    'gamma': None, 'position': 'x_2'}
     """
     pi_match = re.match(r'Pi\((.+),\s*(.+)\)', text.strip())
     if pi_match:
@@ -28,9 +31,18 @@ def parse_pi_operand(text):
             'time': pi_match.group(2).strip()
         }
 
-    prod_match = re.match(r'(prod_Pi\d+)', text.strip())
+    prod_match = re.match(r'(prod_Pi\d+)$', text.strip())
     if prod_match:
         return {'type': 'product', 'ref': prod_match.group(1)}
+
+    vec_match = re.match(r'(prod_vec\d+)(?:_(\w+))?\((x_\d+)\)', text.strip())
+    if vec_match:
+        return {
+            'type': 'vec_product',
+            'ref': vec_match.group(1),
+            'gamma': vec_match.group(2),
+            'position': vec_match.group(3)
+        }
 
     raise ValueError(f"Could not parse operand: '{text}'")
 
@@ -140,6 +152,86 @@ def parse_term_line(line):
     traces = [parse_trace(block) for block in trace_blocks]
 
     return name, coef, traces
+
+
+def parse_phase2(filepath):
+    """Parse all Phase 2 vector-matrix products (position/gamma-independent format).
+
+    Handles all levels including the Level 3 current vertex product.
+
+    Returns dict: {name: (vector_flag, matrix_label)}
+        vector_flag: 0 = <w| (bra), 1 = gamma |v> (gamma-ket),
+                     2 = current vertex (<w| . gamma |v>)
+        matrix_label: tuple ('momentum', 'time') for source Pi,
+                      string 'prod_PiN' or 'prod_vecN' for product ref,
+                      or None for current vertex (flag=2)
+    """
+    result = {}
+    in_phase2 = False
+
+    def parse_matrix_label(text):
+        """Convert matrix operand string to structured label.
+        'Pi(-k, t_snk + Delta)' -> ('-k', 't_snk + Delta')
+        'prod_Pi1' -> 'prod_Pi1'
+        'prod_vec10' -> 'prod_vec10'
+        """
+        pi_match = re.match(r'Pi\((.+),\s*(.+)\)', text.strip())
+        if pi_match:
+            return (pi_match.group(1).strip(), pi_match.group(2).strip())
+        return text.strip()
+
+    with open(filepath) as f:
+        for line in f:
+            stripped = line.strip()
+
+            if 'Phase 2' in stripped:
+                in_phase2 = True
+                continue
+            if 'Phase 3' in stripped:
+                break
+
+            if not in_phase2:
+                continue
+            if stripped.startswith('#') or stripped == '':
+                continue
+
+            # Strip comments
+            stripped = stripped.split('#')[0].strip()
+
+            # Parse product name: prod_vecN (no position/gamma in definition)
+            name_match = re.match(r'(prod_vec\d+)\s*=', stripped)
+            if not name_match:
+                continue
+            name = name_match.group(1)
+
+            # Get RHS
+            _, rhs = stripped.split('=', 1)
+            rhs = rhs.strip()
+            parts = rhs.split(' . ')
+            left = parts[0].strip()
+            right = parts[1].strip()
+
+            # Identify operand types
+            left_is_bra = (left == '<w|')
+            left_is_ket = (left == 'gamma |v>')
+            right_is_bra = (right == '<w|')
+            right_is_ket = (right == 'gamma |v>')
+
+            # Current vertex: <w| . gamma |v>
+            if left_is_bra and right_is_ket:
+                result[name] = (2, None)
+            elif left_is_bra:
+                result[name] = (0, parse_matrix_label(right))
+            elif left_is_ket:
+                result[name] = (1, parse_matrix_label(right))
+            elif right_is_bra:
+                result[name] = (0, parse_matrix_label(left))
+            elif right_is_ket:
+                result[name] = (1, parse_matrix_label(left))
+            else:
+                raise ValueError(f"No vector operand found in: {stripped}")
+
+    return result
 
 
 def parse_phase3(filepath):

@@ -5,9 +5,9 @@
 #
 # Optimization order (compute in this order):
 #   1. prod_Pi products  — matrix-matrix (Pi chain) products (cheap, position-free)
-#   2. prod_vec products — vector-matrix products (expensive, position-local)
-#      Products carry their position: prod_vecN(x_1) lives at x_1
-#      Products at different positions are NEVER combined
+#   2. prod_vec products — vector-matrix products (position/gamma-independent)
+#      Definitions are stripped of position (x_1/x_2) and gamma (mu/nu)
+#      Position and gamma are re-attached in Phase 3 term assembly
 #   3. Term assembly     — combine products into final traces
 #
 # Momentum conventions:
