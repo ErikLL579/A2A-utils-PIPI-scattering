@@ -229,6 +229,11 @@ def collect_pairs(terms,
                 # In matrix-only mode, skip any pair involving a vector
                 if matrix_only and (is_vector_element(a) or is_vector_element(b)):
                     continue
+                # Skip matrix . <w| pairs: the greedy L→R substitution always
+                # consumes the matrix via gamma |v> . matrix first, so these
+                # products are created but never used in substitution
+                if not matrix_only and b.startswith("<w|("):
+                    continue
                 # Enforce position locality
                 if product_positions is not None:
                     pos_a = get_element_position(a, product_positions)
