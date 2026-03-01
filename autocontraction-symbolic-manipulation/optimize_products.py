@@ -626,6 +626,78 @@ def _absorb_bare_matrices(phase2_defs, terms, product_positions, product_gammas)
     return phase2_defs, terms
 
 
+def _reorder_phase2_levels(phase2_defs, terms):
+    """Reorder Phase 2 levels so matrix-vector levels come before vector-vector
+    levels. Swaps Level 2 (vector-vector) and Level 3 (matrix-vector) so that
+    Levels 1 and 2 are both matrix-vector products.
+
+    After reordering, renumbers all prod_vec names sequentially by level
+    and updates all references in both phase2_defs and terms.
+
+    Returns (new_phase2_defs, new_terms).
+    """
+    if len(phase2_defs) < 3:
+        return phase2_defs, terms
+
+    # Swap entries at index 1 (Level 2) and index 2 (Level 3)
+    reordered = list(phase2_defs)
+    reordered[1], reordered[2] = reordered[2], reordered[1]
+
+    # Collect prod_vec numbers in original order
+    old_order_nums = []
+    for _, product_names, _ in phase2_defs:
+        for _, prod_name in product_names.items():
+            m = re.match(r'prod_vec(\d+)', prod_name)
+            if m:
+                old_order_nums.append(int(m.group(1)))
+
+    # Collect prod_vec numbers in new (reordered) order
+    new_order_nums = []
+    for _, product_names, _ in reordered:
+        for _, prod_name in product_names.items():
+            m = re.match(r'prod_vec(\d+)', prod_name)
+            if m:
+                new_order_nums.append(int(m.group(1)))
+
+    # Build rename map: old_number -> new_sequential_number
+    rename_map = {}
+    for new_seq, old_num in enumerate(new_order_nums, start=1):
+        rename_map[old_num] = new_seq
+
+    # Helper to rename prod_vec references in a string
+    def rename(text):
+        def replace(m):
+            old_num = int(m.group(1))
+            if old_num in rename_map:
+                return f"prod_vec{rename_map[old_num]}"
+            return m.group(0)
+        return re.sub(r'prod_vec(\d+)', replace, text)
+
+    # Apply renaming to phase2_defs
+    new_phase2_defs = []
+    for idx, (_, product_names, pair_counts) in enumerate(reordered):
+        new_level = idx + 1
+        new_product_names = OrderedDict()
+        new_pair_counts = {}
+        for pair_key, prod_name in product_names.items():
+            new_pair_key = rename(pair_key)
+            new_prod_name = rename(prod_name)
+            new_product_names[new_pair_key] = new_prod_name
+            new_pair_counts[new_pair_key] = pair_counts[pair_key]
+        new_phase2_defs.append((new_level, new_product_names, new_pair_counts))
+
+    # Apply renaming to terms
+    new_terms = []
+    for name, coef, traces in terms:
+        new_traces = []
+        for trace_str, elements in traces:
+            new_elements = [rename(e) for e in elements]
+            new_traces.append((trace_str, new_elements))
+        new_terms.append((name, coef, new_traces))
+
+    return new_phase2_defs, new_terms
+
+
 def _create_current_vertex_product(phase2_defs, terms):
     """Factor out remaining <w|(pos) . gamma_X |v>(pos) pairs as a single
     canonical product (the current vertex). Added as a new Phase 2 level.
@@ -710,6 +782,7 @@ def optimize(terms):
     phase2_defs, terms = _absorb_bare_matrices(phase2_defs, terms,
                                                product_positions, product_gammas)
     phase2_defs, terms = _create_current_vertex_product(phase2_defs, terms)
+    phase2_defs, terms = _reorder_phase2_levels(phase2_defs, terms)
     return terms, phase1_defs, phase2_defs
 
 
