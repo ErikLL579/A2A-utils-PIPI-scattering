@@ -100,7 +100,7 @@ public:
   
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_to_device(TensorType_mesonfield &Mesonfield,
-                                   deviceVector<ComplexD> &A)
+                                   deviceVector<ComplexD> &A);
 
 
   /*

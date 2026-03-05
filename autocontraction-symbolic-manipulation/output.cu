@@ -24,6 +24,7 @@ int main(int argc, char *argv[])
   Coordinate mpi_layout  = GridDefaultMpi();
   GridCartesian    grid(latt_size,simd_layout,mpi_layout);
   int Nt = GridDefaultLatt()[Tp];
+  int Nd = grid.Dimensions();
   Lattice<iScalar<vInteger>> t(&grid);
   LatticeCoordinate(t, Tp);
   std::vector<int> seeds({1,2,3,4});
@@ -77,6 +78,18 @@ int main(int argc, char *argv[])
 // ====================================================== //
 // ========= COMPLETE MATRIX-MATRIX OPERATIONS ========== //
 // ====================================================== //
+
+
+// ======================================= //
+// ===== GENERATE PHOTON PROPAGATORs ===== //
+// ======================================= //
+
+
+  RealD min = 1.0;
+  vector<ComplexField> phtn_mu_nu(Nd*Nd, &grid);
+
+
+  IVPhotonPropagator<WilsonImplR>::CoulombGaugeMomentumSpace( &phtn_mu_nu[0], min);
 
 
 // ======================================= //
@@ -200,88 +213,88 @@ int main(int argc, char *argv[])
 // ===== BEGIN MAT-VECTOR OPERATIONS ===== //
 // ======================================= //
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec1_mu[0], Pion_source_fields[3], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec2_mu[0], Pion_source_fields[1], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec3_mu[0], Pion_source_fields[2], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec4_mu[0], Pion_source_fields[0], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec5_mu[0], Pion_product_fields_level_1[0], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec6_mu[0], Pion_product_fields_level_1[1], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec7_mu[0], Pion_product_fields_level_1[2], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec8_mu[0], Pion_product_fields_level_1[3], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec9_mu[0], Pion_product_fields_level_1[4], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec10_mu[0], Pion_product_fields_level_1[5], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec11_mu[0], Pion_product_fields_level_1[6], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec12_mu[0], Pion_product_fields_level_1[7], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec13_mu[0], Pion_product_fields_level_2[1], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec14_mu[0], Pion_product_fields_level_2[2], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec15_mu[0], Pion_product_fields_level_2[3], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec16_mu[0], Pion_product_fields_level_2[4], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec17_mu[0], Pion_product_fields_level_2[5], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec18_mu[0], Pion_product_fields_level_2[6], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec19_mu[0], Pion_product_fields_level_2[7], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec20_mu[0], Pion_product_fields_level_2[8], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec21_mu[0], Pion_product_fields_level_2[9], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec22_mu[0], Pion_product_fields_level_2[10], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec23_mu[0], Pion_product_fields_level_2[11], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec24_mu[0], Pion_product_fields_level_2[12], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec25_mu[0], Pion_product_fields_level_2[13], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec26_mu[0], Pion_product_fields_level_2[14], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec27_mu[0], Pion_product_fields_level_2[15], &v[0]);
 
- 
+                                      
   PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec28_mu[0], Pion_product_fields_level_1[8], &v[0]);
 
 
