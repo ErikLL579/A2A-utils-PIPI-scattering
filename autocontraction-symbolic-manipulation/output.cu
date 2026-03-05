@@ -60,8 +60,22 @@ int main(int argc, char *argv[])
 // BUFFER FLAGS FOR MATRIX-MATRIX MULTPLIES  //
   vector<int> buffer_flag_A = {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,};
   vector<int> buffer_flag_B = {0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,};
+ 
+// PERFORM MATRIX MULTIPLICATIONS //
+
+  PipiA2Autils<WilsonImplR>::MesonField_MesonField_connected(Pion_source_fields, 
+                                                             Pion_product_fields_level_1,
+                                                             Pion_product_fields_level_2,
+                                                             num_products_level_1, 
+                                                             buffer_flag_A,
+                                                             buffer_flag_B,
+                                                             A_vector_contractions,
+                                                             B_vector_contractions,
+                                                             C_vector_contractions);
+
 
 // ====================================================== //
+// ========= COMPLETE MATRIX-MATRIX OPERATIONS ========== //
 // ====================================================== //
 
 
@@ -71,119 +85,204 @@ int main(int argc, char *argv[])
 
 
   std::vector<FermionField> prod_vec1_mu(VDIM,&grid);
-  prod_vec1_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec1_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec2_mu(VDIM,&grid);
-  prod_vec2_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec2_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec3_mu(VDIM,&grid);
-  prod_vec3_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec3_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec4_mu(VDIM,&grid);
-  prod_vec4_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec4_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec5_mu(VDIM,&grid);
-  prod_vec5_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec5_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec6_mu(VDIM,&grid);
-  prod_vec6_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec6_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec7_mu(VDIM,&grid);
-  prod_vec7_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec7_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec8_mu(VDIM,&grid);
-  prod_vec8_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec8_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec9_mu(VDIM,&grid);
-  prod_vec9_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec9_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec10_mu(VDIM,&grid);
-  prod_vec10_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec10_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec11_mu(VDIM,&grid);
-  prod_vec11_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec11_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec12_mu(VDIM,&grid);
-  prod_vec12_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec12_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec13_mu(VDIM,&grid);
-  prod_vec13_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec13_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec14_mu(VDIM,&grid);
-  prod_vec14_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec14_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec15_mu(VDIM,&grid);
-  prod_vec15_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec15_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec16_mu(VDIM,&grid);
-  prod_vec16_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec16_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec17_mu(VDIM,&grid);
-  prod_vec17_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec17_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec18_mu(VDIM,&grid);
-  prod_vec18_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec18_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec19_mu(VDIM,&grid);
-  prod_vec19_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec19_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec20_mu(VDIM,&grid);
-  prod_vec20_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec20_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec21_mu(VDIM,&grid);
-  prod_vec21_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec21_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec22_mu(VDIM,&grid);
-  prod_vec22_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec22_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec23_mu(VDIM,&grid);
-  prod_vec23_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec23_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec24_mu(VDIM,&grid);
-  prod_vec24_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec24_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec25_mu(VDIM,&grid);
-  prod_vec25_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec25_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec26_mu(VDIM,&grid);
-  prod_vec26_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec26_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec27_mu(VDIM,&grid);
-  prod_vec27_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec27_mu[i] = Zero();
 
 
   std::vector<FermionField> prod_vec28_mu(VDIM,&grid);
-  prod_vec28_mu = Zero();
+  for(int i=0; i<VDIM; i++) prod_vec28_mu[i] = Zero();
 
 
 // ======================================= //
+// ===== BEGIN MAT-VECTOR OPERATIONS ===== //
 // ======================================= //
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec1_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec2_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec3_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec4_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec5_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec6_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec7_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec8_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec9_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec10_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec11_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec12_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec13_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec14_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec15_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec16_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec17_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec18_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec19_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec20_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec21_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec22_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec23_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec24_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec25_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec26_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec27_mu[0], M_test, &v[0]);
+
+                                      # replace
+  PipiA2Autils<WilsonImplR>::ContractMesonFieldAndVector(&prod_vec28_mu[0], M_test, &v[0]);
 
 
 // epilogue
