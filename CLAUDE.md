@@ -73,14 +73,18 @@ Transforms Wick contraction output (from Luchang's qlat autocontraction) into A2
 1. **Phase 1** (`parse_phase1`): Parses `prod_Pi` lines into Level 1 and Level 2 dicts, where each operand is either:
    - `'type': 'source'` — an original meson field `Pi(momentum, time)` (lives in GPU `A` buffer)
    - `'type': 'product'` — a reference to a Level 1 result (lives in GPU `C` buffer)
-2. **Phase 3** (`parse_phase3`): Parses term assembly lines into dicts of `{'coef': str, 'traces': [[operand_dicts]]}`. Disconnected diagrams (ADT1) have multiple traces; connected (ADT2) have one trace with multiple operands.
-3. **Index resolution** (`level1_to_contractions`, `level2_to_contractions` in `parse_contractions.py`): Maps symbolic labels to flat buffer indices:
+2. **Phase 2** (`parse_phase2`): Parses all Phase 2 vector-matrix products (position/gamma-independent format). Returns `{name: (vector_flag, matrix_label)}` where:
+   - `vector_flag`: 0 = `<w|` (bra), 1 = `gamma |v>` (gamma-ket), 2 = current vertex (`<w| . gamma |v>`)
+   - `matrix_label`: tuple `('momentum', 'time')` for source Pi, string `'prod_PiN'` or `'prod_vecN'` for product ref, or `None` for current vertex (flag=2)
+   - Handles all levels (L1: source Pi, L2: absorbed bare matrix, L3: chained bra, L4: bra+L2, L5: current vertex)
+3. **Phase 3** (`parse_phase3`): Parses term assembly lines into dicts of `{'coef': str, 'traces': [[operand_dicts]]}`. Operand types: `'source'` (Pi fields), `'product'` (prod_Pi refs), `'vec_product'` (prod_vec refs with gamma/position). Disconnected diagrams have multiple traces; connected have one trace with multiple operands.
+4. **Index resolution** (`level1_to_contractions`, `level2_to_contractions` in `parse_contractions.py`): Maps symbolic labels to flat buffer indices:
    - `mom_map`: `{'p': p_idx, '-p': neg_p_idx, 'k': k_idx, '-k': neg_k_idx}`
    - `time_map`: `{'t_src': t_src, 't_src + Delta': (t_src+Delta)%Nt, ...}`
    - `flat_index = p * Nt * Nmodes^2 + t * Nmodes^2`
    - Level 1: Returns `[Ac, Bc, Cc]` dicts with tuple keys `(momentum, time)` for A/B and `(prod_name, left_mom, left_time, right_mom, right_time)` for C
    - Level 2: Returns `[Aadd, Badd, flag_A, flag_B, Cadd]` — handles both explicit Level 2 products (EM) and connected traces from Phase 3 (zeroth order). Uses per-operand buffer flags (0 = source A buffer, 1 = Level 1 result C buffer). All three dicts (Aadd, Badd, Cadd) use `operand_labels()` to resolve product refs back through Level 1 into `(momentum, time, ...)` tuples, so keys are consistent across A/B/C.
-4. Resolved indices fill `vector<int> A_vec, B_vec, C_vec` and `buffer_flag_A/B` for `MesonField_MesonField_connected`
+5. Resolved indices fill `vector<int> A_vec, B_vec, C_vec` and `buffer_flag_A/B` for `MesonField_MesonField_connected`
 
 **Resolved:** `MesonField_MesonField_connected` Level 2 now uses `buffer_flag_A`/`buffer_flag_B` vectors to select between source (`A`) and Level 1 result (`C`) buffers per operand, handling both mixed (A×C) and C×C products.
 
@@ -142,6 +146,31 @@ NAMESPACE_BEGIN(Grid);
 // ... all project code ...
 NAMESPACE_END(Grid);
 ```
+
+## MPI and Parallelization Strategy
+
+### Decision: Use Grid's MPI volume decomposition (`--mpi`)
+
+The workload has ~2700 A2A vectors (lattice fermion fields) and meson field matrices Pi. The main computational patterns are:
+
+1. **Zeroth-order contractions** (Tr[Pi·Pi]): Matrix-matrix products over A2A indices, no FFTs. Embarrassingly parallel.
+2. **FFT type 1** (Appendix B of notes, unmixed A2A indices): FFTs are *outside* the mode loop — only ~16 FFTs total. Volume decomposition is fine.
+3. **FFT type 2** (Appendix C of notes, mixed A2A indices): FFTs are *inside* the `(i_2, i_3)` loop — ~2700² × 4 ≈ 29 million FFTs. However, what gets FFTed is the **scalar result** of `⟨w|γ|v⟩` (a `LatticeComplex`, ~14 MB on 24³×64), not the fermion fields themselves (which would be 12× larger). The all-to-all transpose cost per FFT is small relative to the local computation.
+
+**Use `--mpi` with volume decomposition** (e.g., `--mpi 2.5.5.1` for 50 ranks). This is simpler than manual MPI mode-index distribution and the FFT communication overhead is acceptable:
+- Grid's distributed `FFT` class handles split volumes correctly (transposes as needed per dimension).
+- With `--mpi 1.1.1.N` (time-only split), spatial FFTs are fully local — only the time-direction FFT requires communication.
+- Each rank holds 1/N of each lattice field's volume, so memory is automatically distributed.
+- Grid's I/O routines (`BinaryIO`, ILDG) are MPI-aware — each rank reads only its local portion.
+- Lattice dimensions must be divisible by the corresponding MPI dimensions.
+
+**Alternative considered and rejected for now:** Mode-index distribution (`--enable-comms=none` + manual `MPI_Init`/`MPI_Comm_rank`). Each rank holds the full volume but only a subset of A2A vectors. Eliminates FFT communication entirely but requires manual MPI code and custom I/O. Would only be worth it if FFT communication proves to be a bottleneck after profiling.
+
+### FFT convolution optimization (Appendix A of notes)
+
+The FFT convolution `C = Σ_{x,y} φ(x) ψ(y) Δ(x-y)` can be computed entirely in momentum space: `C = Σ_k φ̃(-k) Δ̃(k) ψ̃(k)`. No inverse FFT is needed — Parseval's theorem applies since C is a scalar. This saves one FFT per convolution compared to the IFFT+position-space-sum approach.
+
+**Important:** The bilinear `⟨w(x)|γ|v(x)⟩` is a site-local pointwise product, which becomes a convolution in momentum space. You cannot FFT v and w individually and combine in momentum space — that gives only the diagonal term, missing all cross-terms. The bilinear must be computed in position space first, then the scalar result FFTed.
 
 ## Dependencies
 

@@ -94,8 +94,8 @@ def parse_phase1(filepath):
                 current_level = 2
                 continue
 
-            # stop at Phase 2 or Phase 3
-            if 'Phase 2' in stripped or 'Phase 3' in stripped:
+            # stop at Phase 2 or Phase 3 section headers
+            if stripped.startswith('# Phase 2:') or stripped.startswith('# Phase 3:'):
                 current_level = None
                 continue
 
@@ -184,10 +184,10 @@ def parse_phase2(filepath):
         for line in f:
             stripped = line.strip()
 
-            if 'Phase 2' in stripped:
+            if stripped.startswith('# Phase 2:'):
                 in_phase2 = True
                 continue
-            if 'Phase 3' in stripped:
+            if stripped.startswith('# Phase 3:'):
                 break
 
             if not in_phase2:
@@ -198,8 +198,8 @@ def parse_phase2(filepath):
             # Strip comments
             stripped = stripped.split('#')[0].strip()
 
-            # Parse product name: prod_vecN (no position/gamma in definition)
-            name_match = re.match(r'(prod_vec\d+)\s*=', stripped)
+            # Parse product name: prod_vecN or prod_vecN_mu
+            name_match = re.match(r'(prod_vec\d+(?:_\w+)?)\s*=', stripped)
             if not name_match:
                 continue
             name = name_match.group(1)
@@ -213,11 +213,11 @@ def parse_phase2(filepath):
 
             # Identify operand types
             left_is_bra = (left == '<w|')
-            left_is_ket = (left == 'gamma |v>')
+            left_is_ket = bool(re.match(r'gamma_\w+\s+\|v>', left))
             right_is_bra = (right == '<w|')
-            right_is_ket = (right == 'gamma |v>')
+            right_is_ket = bool(re.match(r'gamma_\w+\s+\|v>', right))
 
-            # Current vertex: <w| . gamma |v>
+            # Current vertex: <w| . gamma_mu |v>
             if left_is_bra and right_is_ket:
                 result[name] = (2, None)
             elif left_is_bra:
@@ -234,6 +234,101 @@ def parse_phase2(filepath):
     return result
 
 
+def phase2_to_buffer_indices(filepath):
+    """Parse Phase 2 products into buffer index mappings for C++ code generation.
+
+    For a single (p, k, t_src, t_snk) combination, the matrix buffer is indexed:
+        0: Pi(p, t_src)
+        1: Pi(-p, t_src + Delta)
+        2: Pi(k, t_snk)
+        3: Pi(-k, t_snk + Delta)
+        4: prod_Pi1
+        5: prod_Pi2
+        ...
+        J+3: prod_PiJ
+
+    Returns (gamma_ket_indices, bra_indices):
+        gamma_ket_indices: dict {prod_name: buffer_index} for L1+L2
+            e.g. {'prod_vec1_mu': 3, 'prod_vec5_mu': 4, ...}
+        bra_indices: dict {prod_name: (bra_label, ref)} for L3+L4+L5
+            e.g. {'prod_vec29_mu': ('w', 'prod_vec10_mu'), ...,
+                   'prod_vec57_mu': ('w', 'v')}
+    """
+    source_pi_map = {
+        ('p', 't_src'): 0,
+        ('-p', 't_src + Delta'): 1,
+        ('k', 't_snk'): 2,
+        ('-k', 't_snk + Delta'): 3,
+    }
+
+    gamma_ket_indices = {}
+    bra_indices = {}
+
+    in_phase2 = False
+    current_level = None
+
+    with open(filepath) as f:
+        for line in f:
+            stripped = line.strip()
+
+            if stripped.startswith('# Phase 2:'):
+                in_phase2 = True
+                continue
+            if stripped.startswith('# Phase 3:'):
+                break
+            if not in_phase2:
+                continue
+
+            # Track level changes
+            level_match = re.match(r'# Level (\d+):', stripped)
+            if level_match:
+                current_level = int(level_match.group(1))
+                continue
+
+            if stripped.startswith('#') or stripped == '':
+                continue
+
+            # Strip comments
+            stripped = stripped.split('#')[0].strip()
+
+            # Parse: prod_vecN_mu = RHS
+            name_match = re.match(r'(prod_vec\d+(?:_\w+)?)\s*=\s*(.*)', stripped)
+            if not name_match:
+                continue
+
+            name = name_match.group(1)
+            rhs = name_match.group(2).strip()
+            parts = rhs.split(' . ')
+            left = parts[0].strip()
+            right = parts[1].strip() if len(parts) > 1 else ''
+
+            if current_level in (1, 2):
+                # gamma_mu |v> . matrix → extract matrix operand
+                matrix = right
+
+                # Source Pi → index 0..3
+                pi_match = re.match(r'Pi\((.+),\s*(.+)\)', matrix)
+                if pi_match:
+                    mom = pi_match.group(1).strip()
+                    time = pi_match.group(2).strip()
+                    gamma_ket_indices[name] = source_pi_map[(mom, time)]
+                else:
+                    # prod_PiJ → index J + 3
+                    j_match = re.match(r'prod_Pi(\d+)', matrix)
+                    if j_match:
+                        gamma_ket_indices[name] = int(j_match.group(1)) + 3
+
+            elif current_level in (3, 4):
+                # <w| . prod_vecM_mu → ('w', 'prod_vecM_mu')
+                bra_indices[name] = ('w', right)
+
+            elif current_level == 5:
+                # <w| . gamma_mu |v> → ('w', 'v')
+                bra_indices[name] = ('w', 'v')
+
+    return gamma_ket_indices, bra_indices
+
+
 def parse_phase3(filepath):
     """Parse Phase 3 (term assembly) from an optimized contraction file.
 
@@ -247,7 +342,7 @@ def parse_phase3(filepath):
         for line in f:
             stripped = line.strip()
 
-            if 'Phase 3' in stripped:
+            if stripped.startswith('# Phase 3:'):
                 in_phase3 = True
                 continue
 
@@ -444,6 +539,20 @@ if __name__ == '__main__':
     if level2:
         print(f"\n=== Level 2: {len(level2)} products ===")
         pprint(level2)
+
+    phase2 = parse_phase2(filepath)
+    print(f"\n=== Phase 2: {len(phase2)} products ===")
+    for name, val in phase2.items():
+        print(f"  {name}: {val}")
+
+    gamma_ket_indices, bra_indices = phase2_to_buffer_indices(filepath)
+    print(f"\n=== Phase 2 buffer indices: {len(gamma_ket_indices)} gamma-ket, {len(bra_indices)} bra ===")
+    print("Gamma-ket (L1+L2):")
+    for name, val in gamma_ket_indices.items():
+        print(f"  {name}: {val}")
+    print("Bra (L3+L4+L5):")
+    for name, val in bra_indices.items():
+        print(f"  {name}: {val}")
 
     terms = parse_phase3(filepath)
     print(f"\n=== Phase 3: {len(terms)} terms ===")
