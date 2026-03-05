@@ -446,15 +446,14 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     
     GridBLAS blas;
     
-    int num_momenta = Mesonfield.dimension(0);
     int timeslices  = Mesonfield.dimension(1);
-    int Nmodes = Mesonfield.dimension(2);
+    int Nmodes = Mesonfield.dimension(1);
     
     // total number of pion meson fields stored on device
-    int num_matrices = num_momenta * timeslices;
+    int num_matrices = timeslices;
 
     // make sure mesonfield is what I expect  
-    GRID_ASSERT(Nmodes == Mesonfield.dimension(3));
+    GRID_ASSERT(Nmodes == Mesonfield.dimension(2));
     
     // need to write something to determine batch size based on available device memory
     // ex single Meson field: 2700 * 2700 * 16 ~ 11MB
