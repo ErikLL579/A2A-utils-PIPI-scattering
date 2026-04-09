@@ -65,6 +65,7 @@ Transforms Wick contraction output (from Luchang's qlat autocontraction) into A2
 - The A2A factorization algebra: `S(x,y) = Σᵢ |vⁱ(x)⟩⟨wⁱ(y)|`
 - Data classes: `Propagator`, `Trace`, `Term`, `MesonField`, `CurrentVertex`, `MesonChain`
 - Two-phase product optimization (matrix-matrix then vector-matrix, with position locality constraints)
+- Position-swap deduplication: terms equivalent under x_1 ↔ x_2 are identified and written as redirects (e.g., `term_Type12_2 = term_Type12_1 (x1 <-> x2)`), halving the number of unique evaluations (80 → 40 for EM)
 - Momentum space conventions and diagram types
 
 ### Contraction Index Pipeline (autocontraction-symbolic-manipulation/)
@@ -82,7 +83,7 @@ Transforms Wick contraction output (from Luchang's qlat autocontraction) into A2
    - `mom_map`: `{'p': p_idx, '-p': neg_p_idx, 'k': k_idx, '-k': neg_k_idx}`
    - `time_map`: `{'t_src': t_src, 't_src + Delta': (t_src+Delta)%Nt, ...}`
    - `flat_index = p * Nt * Nmodes^2 + t * Nmodes^2`
-   - Level 1: Returns `[Ac, Bc, Cc]` dicts with tuple keys `(momentum, time)` for A/B and `(prod_name, left_mom, left_time, right_mom, right_time)` for C
+   - Level 1: Returns `[Ac, Bc, Cc]` dicts with tuple keys `(prod_name, momentum, time)` for A/B and `(prod_name, left_mom, left_time, right_mom, right_time)` for C
    - Level 2: Returns `[Aadd, Badd, flag_A, flag_B, Cadd]` — handles both explicit Level 2 products (EM) and connected traces from Phase 3 (zeroth order). Uses per-operand buffer flags (0 = source A buffer, 1 = Level 1 result C buffer). All three dicts (Aadd, Badd, Cadd) use `operand_labels()` to resolve product refs back through Level 1 into `(momentum, time, ...)` tuples, so keys are consistent across A/B/C.
 5. Resolved indices fill `vector<int> A_vec, B_vec, C_vec` and `buffer_flag_A/B` for `MesonField_MesonField_connected`
 

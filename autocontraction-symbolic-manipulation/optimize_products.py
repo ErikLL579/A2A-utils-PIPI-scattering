@@ -769,6 +769,75 @@ def _create_current_vertex_product(phase2_defs, terms):
     return phase2_defs, new_terms
 
 
+def _swap_position_gamma(elem: str) -> str:
+    """Swap x_1 <-> x_2 and mu <-> nu in an element string."""
+    # Temporary placeholders to avoid double-swap
+    s = elem.replace('x_1', 'X_TEMP_1').replace('x_2', 'X_TEMP_2')
+    s = s.replace('X_TEMP_1', 'x_2').replace('X_TEMP_2', 'x_1')
+    s = s.replace('_mu', '_MU_TEMP').replace('_nu', '_NU_TEMP')
+    s = s.replace('_MU_TEMP', '_nu').replace('_NU_TEMP', '_mu')
+    return s
+
+
+def _term_signature(traces):
+    """Return a hashable signature for a term's traces, invariant to:
+    - trace ordering (disconnected: Tr[A]*Tr[B] = Tr[B]*Tr[A])
+    - cyclic permutations within a trace (Tr[A.B] = Tr[B.A])
+
+    Each trace is normalized to its lexicographically smallest cyclic rotation.
+    """
+    trace_sigs = []
+    for trace_str, elements in traces:
+        n = len(elements)
+        if n <= 1:
+            trace_sigs.append(tuple(elements))
+        else:
+            rotations = [tuple(elements[i:] + elements[:i]) for i in range(n)]
+            trace_sigs.append(min(rotations))
+    return tuple(sorted(trace_sigs))
+
+
+def _dedup_position_swap(terms):
+    """Identify terms that are identical under x_1 <-> x_2 (and mu <-> nu) swap.
+
+    Since both positions are summed over, swapped terms give the same result.
+    Keep the first occurrence and mark the duplicate as a redirect.
+
+    Returns list of (name, coef, traces_or_redirect) where traces_or_redirect is
+    either the normal traces list or a string 'term_X (x1 <-> x2)'.
+    """
+    new_terms = []
+    # Map from (coef, swapped_signature) -> name of the kept term
+    seen = {}
+
+    for name, coef, traces in terms:
+        sig = _term_signature(traces)
+
+        # Build the swapped version
+        swapped_traces = []
+        for trace_str, elements in traces:
+            swapped_elements = [_swap_position_gamma(e) for e in elements]
+            swapped_traces.append((trace_str, swapped_elements))
+        swapped_sig = _term_signature(swapped_traces)
+
+        # Check if we already have this term or its swap
+        key_self = (coef, sig)
+        key_swap = (coef, swapped_sig)
+
+        if key_self in seen:
+            # Exact duplicate (shouldn't happen, but handle it)
+            new_terms.append((name, coef, f"{seen[key_self]} (x1 <-> x2)"))
+        elif key_swap in seen and key_swap != key_self:
+            # This term is the position-swapped version of an earlier term
+            new_terms.append((name, coef, f"{seen[key_swap]} (x1 <-> x2)"))
+        else:
+            # New unique term — register under its own signature
+            seen[key_self] = name
+            new_terms.append((name, coef, traces))
+
+    return new_terms
+
+
 def optimize(terms):
     """
     Two-phase optimization:
@@ -776,6 +845,7 @@ def optimize(terms):
       Phase 2: Vector-matrix products — expensive, position-local only
       Dedup: Merge Phase 2 products differing only by position/gamma
       Current vertex: Factor out remaining <w| . gamma |v> pairs
+      Position swap dedup: Identify terms equivalent under x_1 <-> x_2
 
     Returns:
         (terms, phase1_defs, phase2_defs)
@@ -788,6 +858,7 @@ def optimize(terms):
                                                product_positions, product_gammas)
     phase2_defs, terms = _create_current_vertex_product(phase2_defs, terms)
     phase2_defs, terms = _reorder_phase2_levels(phase2_defs, terms)
+    terms = _dedup_position_swap(terms)
     return terms, phase1_defs, phase2_defs
 
 
@@ -849,11 +920,15 @@ def write_optimized_output(output_path: str, terms, phase1_defs, phase2_defs):
         f.write("# Phase 3: Term assembly\n")
         f.write("# =========================================================\n")
         for name, coef, traces in terms:
-            trace_strs = []
-            for trace_str, elements in traces:
-                chain_str = " . ".join(elements)
-                trace_strs.append(f"Tr[{chain_str}]")
-            f.write(f"{name} = {coef} * {' * '.join(trace_strs)}\n")
+            if isinstance(traces, str):
+                # Redirect: traces is e.g. "term_Type12_1 (x1 <-> x2)"
+                f.write(f"{name} = {traces}\n")
+            else:
+                trace_strs = []
+                for trace_str, elements in traces:
+                    chain_str = " . ".join(elements)
+                    trace_strs.append(f"Tr[{chain_str}]")
+                f.write(f"{name} = {coef} * {' * '.join(trace_strs)}\n")
 
 
 # =============================================================================
