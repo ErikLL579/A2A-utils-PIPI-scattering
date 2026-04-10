@@ -1,3 +1,4 @@
+
 # Optimized pion meson field form (momentum space)
 # <w|gamma_X|v>(pos) split into <w|(pos) and gamma_X |v>(pos)
 # '.' denotes matrix multiplication (A2A index contraction)

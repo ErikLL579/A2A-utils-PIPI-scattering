@@ -334,8 +334,11 @@ def parse_phase3(filepath):
 
     Returns:
         terms: dict mapping term name to {'coef': str, 'traces': list of lists}
+        duplicates: dict mapping redirect term name to target term name
+            e.g. {'term_Type10_4': 'term_Type10_0', ...}
     """
     terms = {}
+    duplicates = {}
     in_phase3 = False
 
     with open(filepath) as f:
@@ -353,10 +356,14 @@ def parse_phase3(filepath):
                 continue
 
             if stripped.startswith('term_'):
+                redirect_match = re.match(r'(term_\S+)\s*=\s*(term_\S+)\s*\(x1\s*<->\s*x2\)', stripped)
+                if redirect_match:
+                    duplicates[redirect_match.group(1)] = redirect_match.group(2)
+                    continue
                 name, coef, traces = parse_term_line(stripped)
                 terms[name] = {'coef': coef, 'traces': traces}
 
-    return terms
+    return terms, duplicates
 
 
 # =========================================================
@@ -413,13 +420,13 @@ def level1_to_contractions(momenta_set, time_set, level1, Nmodes, Nt,
         momentum = momenta_map[level1[i]['left']['momentum']]
         time = time_map[level1[i]['left']['time']]
 
-        key = (level1[i]['left']['momentum'], level1[i]['left']['time'])
+        key = (i, level1[i]['left']['momentum'], level1[i]['left']['time'])
         Aadd[key] = momentum_time_index_to_flattened_index(momentum, time, Nmodes, Nt)
 
         momentum = momenta_map[level1[i]['right']['momentum']]
         time = time_map[level1[i]['right']['time']]
 
-        key = (level1[i]['right']['momentum'], level1[i]['right']['time'])
+        key = (i, level1[i]['right']['momentum'], level1[i]['right']['time'])
         Badd[key] = momentum_time_index_to_flattened_index(momentum, time, Nmodes, Nt)
 
         key = (i, level1[i]['left']['momentum'], level1[i]['left']['time'],
@@ -525,6 +532,81 @@ def level2_to_contractions(momenta_set, time_set, level1, level2, terms, Nmodes,
     return [Aadd, Badd, flag_A, flag_B, Cadd]
 
 
+def parse_expr_factors(filepath, expr_index=4):
+    """Parse the exprs[N] block from the original cexpr file.
+
+    Extracts the numerical factor for each term_TypeX_Y line between
+    the exprs[N] header and the next exprs[N+1] header.
+
+    Args:
+        filepath: path to the original cexpr file (e.g. I2_pipi_EM_cexpr_original.txt)
+        expr_index: which exprs block to parse (default 4 for j_0 * j_0)
+
+    Returns:
+        factors: dict mapping term name to its factor as a string
+            e.g. {'term_Type5_3': '2/9', 'term_Type1_0': '-1/9', ...}
+    """
+    factors = {}
+    in_block = False
+    header = f'exprs[{expr_index}]'
+    next_header = f'exprs[{expr_index + 1}]'
+
+    with open(filepath) as f:
+        for line in f:
+            stripped = line.strip()
+
+            # Detect start of our block (the comment line)
+            if stripped.startswith('#') and header in stripped:
+                in_block = True
+                continue
+
+            # Stop at next block
+            if in_block and next_header in stripped:
+                break
+
+            if not in_block:
+                continue
+
+            # Parse lines like: exprs[4] += 2/9*term_Type5_3
+            match = re.match(
+                r'exprs\[\d+\]\s*\+=\s*([+-]?\s*\d+(?:/\d+)?)\s*\*\s*(term_\S+)',
+                stripped
+            )
+            if match:
+                factor_str = match.group(1).replace(' ', '')
+                term_name = match.group(2)
+                factors[term_name] = factor_str
+
+    return factors
+
+
+def choose_appropriate_matrix(matrix_index, level1_len, level2_len=0):
+    """Map a flat buffer index to the appropriate C++ Pion buffer expression.
+
+    Buffer layout:
+        0-3: Pion_source_fields (4 source Pi fields)
+        4 .. 4+level1_len-1: Pion_product_fields_level_1
+        4+level1_len .. : Pion_product_fields_level_2
+    """
+    if matrix_index < 4:
+        return f"Pion_source_fields[{matrix_index}]"
+    elif matrix_index >= 4 + level1_len:
+        return f"Pion_product_fields_level_2[{matrix_index - level1_len - 4}]"
+    else:
+        return f"Pion_product_fields_level_1[{matrix_index - 4}]"
+
+
+def prod_pi_to_matrix(name, level1_len):
+    """Map a prod_Pi string (e.g. 'prod_Pi1') to the appropriate C++ buffer expression.
+
+    Source Pi fields (Pi(p,t_src), etc.) are indexed 0-3 in Pion_source_fields.
+    Level 1 products (prod_Pi1..prod_Pi8) start at index 4.
+    Level 2 products (prod_Pi9+) follow after Level 1.
+    """
+    j = int(re.match(r'prod_Pi(\d+)', name).group(1))
+    return choose_appropriate_matrix(j + 3, level1_len)
+
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print(f"Usage: python3 {sys.argv[0]} <optimized_file.txt>")
@@ -554,6 +636,9 @@ if __name__ == '__main__':
     for name, val in bra_indices.items():
         print(f"  {name}: {val}")
 
-    terms = parse_phase3(filepath)
-    print(f"\n=== Phase 3: {len(terms)} terms ===")
+    terms, duplicates = parse_phase3(filepath)
+    print(f"\n=== Phase 3: {len(terms)} terms, {len(duplicates)} duplicates ===")
     pprint(terms)
+    if duplicates:
+        print(f"\n=== Duplicates (x1 <-> x2): ===")
+        pprint(duplicates)

@@ -1,0 +1,33 @@
+# Begin CExpr
+diagram_type_dict = dict()
+diagram_type_dict[()] = 'ADT0'
+diagram_type_dict[((('snk_1', 'src_1'), 1), (('snk_2', 'src_2'), 1), (('src_1', 'snk_1'), 1), (('src_2', 'snk_2'), 1))] = 'ADT1'
+diagram_type_dict[((('snk_1', 'src_1'), 1), (('snk_2', 'src_2'), 1), (('src_1', 'snk_2'), 1), (('src_2', 'snk_1'), 1))] = 'ADT2'
+# Positions:
+snk_1, snk_2, src_1, src_2 = ['snk_1', 'snk_2', 'src_1', 'src_2']
+# Diagram type coef:
+coef_ADT0                      = 1
+coef_ADT1                      = 1
+coef_ADT2                      = 1
+# Named terms:
+term_ADT0_0                    = coef_ADT0 * 
+term_ADT1_0                    = coef_ADT1 * tr(gamma_5*S_l(snk_1,src_1)*gamma_5*S_l(src_1,snk_1))*tr(gamma_5*S_l(snk_2,src_2)*gamma_5*S_l(src_2,snk_2))
+term_ADT1_1                    = coef_ADT1 * tr(gamma_5*S_l(snk_1,src_2)*gamma_5*S_l(src_2,snk_1))*tr(gamma_5*S_l(snk_2,src_1)*gamma_5*S_l(src_1,snk_2))
+term_ADT2_0                    = coef_ADT2 * tr(gamma_5*S_l(snk_1,src_1)*gamma_5*S_l(src_1,snk_2)*gamma_5*S_l(snk_2,src_2)*gamma_5*S_l(src_2,snk_1))
+term_ADT2_1                    = coef_ADT2 * tr(gamma_5*S_l(snk_1,src_2)*gamma_5*S_l(src_2,snk_2)*gamma_5*S_l(snk_2,src_1)*gamma_5*S_l(src_1,snk_1))
+terms = [ 0 for i in range(5) ]
+terms[0] = term_ADT0_0
+terms[1] = term_ADT1_0
+terms[2] = term_ADT1_1
+terms[3] = term_ADT2_0
+terms[4] = term_ADT2_1
+# Named exprs:
+exprs = [ 0 for i in range(2) ]
+# < 1 >  exprs[0]
+exprs[0] += 1*term_ADT0_0
+# < pipi_i22+^dag(0) * pipi_i22(-tsep) >  exprs[1]
+exprs[1] += 1*term_ADT1_0
+exprs[1] += -1*term_ADT2_0
+exprs[1] += 1*term_ADT1_1
+exprs[1] += -1*term_ADT2_1
+# End CExpr
