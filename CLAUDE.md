@@ -59,6 +59,10 @@ python3 autocontraction-symbolic-manipulation/optimize_products.py <name>_mom.tx
 
 - **`prop-test.cc`** — Validation tests for photon propagators (both gauges, both spaces)
 
+- **`load_data.h`** — Standalone header (Grid-only, no Hadrons) with two loaders:
+  - `loadMesonFields(filename, datasetName, nt)` — Reads A2A meson fields from HDF5 (`.h5`) files. Returns `std::vector<MesonFieldMatrix>` (one `Eigen::Matrix<ComplexF, Dynamic, Dynamic, RowMajor>` per timeslice). On-disk format: HDF5 dataset `<datasetName>/a2aMatrix` with shape `[nt, ni, nj]` in `ComplexF`.
+  - `loadBinnedA2AVecs<binSize>(vec, filestem, trajectory, grid)` — Reads binned A2A eigenvectors from SCIDAC/LIME multiFile format (`<filestem>.<traj>/elem0.bin`, `elem1.bin`, ...). Unpacks into a pre-sized `std::vector<FermionField>`. Template parameter `binSize` must match the data (e.g. 173 for light quarks, 196 for strange). Uses Grid's `ScidacReader` and `peekLorentz` for unpacking.
+
 ### Python Pipeline (autocontraction-symbolic-manipulation/)
 
 Transforms Wick contraction output (from Luchang's qlat autocontraction) into A2A meson field form. See `autocontraction-symbolic-manipulation/CLAUDE.md` for detailed documentation of:
