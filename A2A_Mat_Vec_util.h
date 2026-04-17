@@ -523,7 +523,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // (check that the matrices are transposed correctly)
     blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As1, Bs1, beta, Cs1);
     blas.synchronise();
-    }  
+      
 
     RealD t1 = usecond();
     flops = flops / (t1 - t0) / 1.e3;
@@ -536,7 +536,11 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "=================================================== " << endl;
 
     acceleratorCopyFromDevice(&C[0], Result_round_1.data(), Nmodes * Nmodes * sizeof(ComplexD) * (contractions - level_1_contractions) );
-    
+
+    // end variable scope
+    }
+
+
     // ========================================================
     // second round of contractions
     // ========================================================
