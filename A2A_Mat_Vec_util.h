@@ -79,9 +79,9 @@ public:
   static void MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
                                               TensorType_TraceMomTime &Result_round_1,
                                               TensorType_TraceMomTime &Result_round_2, // these might have to be changed for different lengths
-                                              int level_1_contraction;
-					      vector<int> & buffer_flag_A; // True when evaluaring things like Prod_Pi2 * Prod_Pi4 in the second level, false for Prod_Pi1 * Pi(k, tsrc)
-					      vector<int> & buffer_flag_B;
+                                              int level_1_contraction,
+					      vector<int> & buffer_flag_A, // True when evaluaring things like Prod_Pi2 * Prod_Pi4 in the second level, false for Prod_Pi1 * Pi(k, tsrc)
+					      vector<int> & buffer_flag_B,
                                               vector<int> &A_vector_contractions,
                                               vector<int> &B_vector_contractions,
                                               vector<int> &C_vector_contractions);
@@ -90,7 +90,7 @@ public:
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
                                               TensorType_TraceMomTime &Result,
- 					      int level_1_contraction;
+ 					      int level_1_contraction,
                                               vector<int> &A_vector_contractions,
                                               vector<int> &B_vector_contractions,
                                               vector<int> &C_vector_contractions);
@@ -319,7 +319,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
                                                             TensorType_TraceMomTime &Result,
-                                                            int level_1_contraction;
+                                                            int level_1_contraction,
                                                             vector<int> &A_vector_contractions,
                                                             vector<int> &B_vector_contractions,
                                                             vector<int> &C_vector_contractions)
@@ -432,9 +432,9 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   void PipiA2Autils<FImpl>::MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
                                                             TensorType_TraceMomTime &Result_round_1,
                                                             TensorType_TraceMomTime &Result_round_2, // these might have to be changed for different lengths
-                                                            int level_1_contraction;
-							    vector<int> &buffer_flag_A;
-                                                            vector<int> &buffer_flag_B;
+                                                            int level_1_contraction,
+							    vector<int> &buffer_flag_A,
+                                                            vector<int> &buffer_flag_B,
                                                             vector<int> &A_vector_contractions,
                                                             vector<int> &B_vector_contractions,
                                                             vector<int> &C_vector_contractions)
