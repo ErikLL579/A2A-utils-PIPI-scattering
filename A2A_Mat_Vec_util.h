@@ -304,7 +304,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   const int max_batch_size = 100;
   
   // set up memory on device
-  const int Ncomplex = Nmodes * Nmodes * contractions;
+  // THIS LINE WONT WORK BUT I AM NOT FIXING IT YET
+  const int Ncomplex = Nmodes * Nmodes ;//* contractions;
 
   // deviceVector<ComplexD> A(Ncomplex); // input vectors
 
