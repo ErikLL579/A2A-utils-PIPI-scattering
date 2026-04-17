@@ -498,7 +498,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     deviceVector<ComplexD* > Cs1(level_1_contractions);
 
  // vector of which matrices to contract
-    for(int b=0; b<level_1_contraction; b++) {  
+    for(int b=0; b<level_1_contractions; b++) {  
       ComplexD *ptr;
     
       // this needs to be modified in the case that I want to use matrices more than once (which I do)
