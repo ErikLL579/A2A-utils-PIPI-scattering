@@ -580,7 +580,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     }
 
     RealD t0 = usecond();
-
+    ComplexD alpha(1.0);
+    ComplexD beta(0.0);
 
     // (check that the matrices are transposed correctly)
     blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As2, Cs2, beta, level_2_result_s);
