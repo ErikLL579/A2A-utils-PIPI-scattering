@@ -98,11 +98,13 @@ public:
 
   // may swap to using these
   
+/*
+
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_to_device(TensorType_mesonfield &Mesonfield,
                                    deviceVector<ComplexD> &A);
 
-
+*/
   /*
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_from_device(TensorType_mesonfield &Mesonfield,
@@ -286,6 +288,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 */
 };
 
+/* // not needed atm
   template<class FImpl>
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_to_device(TensorType_mesonfield &Mesonfield,
@@ -305,7 +308,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   
   // set up memory on device
   // THIS LINE WONT WORK BUT I AM NOT FIXING IT YET
-  const int Ncomplex = Nmodes * Nmodes ;//* contractions;
+  const int Ncomplex = Nmodes * Nmodes * contractions;
 
   // deviceVector<ComplexD> A(Ncomplex); // input vectors
 
@@ -313,7 +316,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * contractions * sizeof(ComplexD));
 
 };
-
+*/
 
 
   template<class FImpl>
