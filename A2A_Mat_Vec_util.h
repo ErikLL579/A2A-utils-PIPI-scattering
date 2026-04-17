@@ -350,8 +350,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     const int contractions = A_vector_contractions.size();
 
     // check that contraction vector are the same size
-    GRID_ASSERT(contractions = B_vector_contractions.size());
-    GRID_ASSERT(contractions = C_vector_contractions.size());
+    GRID_ASSERT(contractions == B_vector_contractions.size());
+    GRID_ASSERT(contractions == C_vector_contractions.size());
     GRID_ASSERT(contractions < max_batch_size);
 
     // total number of matrices
@@ -467,8 +467,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     const int contractions = A_vector_contractions.size();
      
     // check that contraction vector are the same size
-    GRID_ASSERT(contractions = B_vector_contractions.size());
-    GRID_ASSERT(contractions = C_vector_contractions.size());
+    GRID_ASSERT(contractions == B_vector_contractions.size());
+    GRID_ASSERT(contractions == C_vector_contractions.size());
     GRID_ASSERT(contractions < max_batch_size);
       
     // total number of matrices
