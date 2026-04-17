@@ -79,7 +79,7 @@ public:
   static void MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
                                               TensorType_TraceMomTime &Result_round_1,
                                               TensorType_TraceMomTime &Result_round_2, // these might have to be changed for different lengths
-                                              int level_1_contraction,
+                                              int level_1_contractions,
 					      vector<int> & buffer_flag_A, // True when evaluaring things like Prod_Pi2 * Prod_Pi4 in the second level, false for Prod_Pi1 * Pi(k, tsrc)
 					      vector<int> & buffer_flag_B,
                                               vector<int> &A_vector_contractions,
@@ -90,7 +90,7 @@ public:
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   static void MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
                                               TensorType_TraceMomTime &Result,
- 					      int level_1_contraction,
+ 					      int level_1_contractions,
                                               vector<int> &A_vector_contractions,
                                               vector<int> &B_vector_contractions,
                                               vector<int> &C_vector_contractions);
@@ -323,7 +323,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_MesonField_disconnected(TensorType_mesonfield &Mesonfield,
                                                             TensorType_TraceMomTime &Result,
-                                                            int level_1_contraction,
+                                                            int level_1_contractions,
                                                             vector<int> &A_vector_contractions,
                                                             vector<int> &B_vector_contractions,
                                                             vector<int> &C_vector_contractions)
@@ -408,7 +408,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // (check that the matrices are transposed correctly)
     blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As, Bs, beta, Cs);
     blas.synchronise();
-    }
+    
 
     RealD t1 = usecond();
     flops = flops / (t1 - t0) / 1.e3;
@@ -425,6 +425,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
     //Eigen::Tensor<ComplexD,4, Eigen::RowMajor> c(momenta.size(),Nt,Nmodes,Nmodes);
     acceleratorCopyFromDevice(&C[0], Result.data(), Nmodes * Nmodes * sizeof(ComplexD) * contractions);
+    }
 };
 
 
@@ -436,7 +437,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   void PipiA2Autils<FImpl>::MesonField_MesonField_connected(TensorType_mesonfield &Mesonfield,
                                                             TensorType_TraceMomTime &Result_round_1,
                                                             TensorType_TraceMomTime &Result_round_2, // these might have to be changed for different lengths
-                                                            int level_1_contraction,
+                                                            int level_1_contractions,
 							    vector<int> &buffer_flag_A,
                                                             vector<int> &buffer_flag_B,
                                                             vector<int> &A_vector_contractions,
@@ -545,7 +546,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // second round of contractions
     // ========================================================
 
-    // wrap the below in {} so that the device deallocates memory when finished
+    / wrap the below in {} so that the device deallocates memory when finished
     {
     // need different lengths in levels one and two
     deviceVector<ComplexD* > As2(contractions - level_1_contractions); // again these are the source meson fields
