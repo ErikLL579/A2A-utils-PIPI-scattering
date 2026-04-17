@@ -578,12 +578,15 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
       acceleratorPut(level_2_result_s[b], ptr);
     }
 
+    RealD t0 = usecond();
+
 
     // (check that the matrices are transposed correctly)
     blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As2, Cs2, beta, level_2_result_s);
     blas.synchronise();
 
-    flops = 8.0 * Nmodes * Nmodes * Nmodes * (contractions - level_1_contractions);    
+    RealD t1 = usecond();
+    RealD flops = 8.0 * Nmodes * Nmodes * Nmodes * (contractions - level_1_contractions);    
     flops = flops / (t1 - t0) / 1.e3;
 
     cout << GridLogMessage << "=================================================== " << endl;
