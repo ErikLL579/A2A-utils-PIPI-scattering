@@ -286,7 +286,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 */
 };
 
-
+  template<class FImpl>
   template<typename TensorType_mesonfield, typename TensorType_TraceMomTime>
   void PipiA2Autils<FImpl>::MesonField_to_device(TensorType_mesonfield &Mesonfield,
                                                  deviceVector<ComplexD> &A)       
