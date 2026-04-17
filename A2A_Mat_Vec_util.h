@@ -546,7 +546,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // second round of contractions
     // ========================================================
 
-    / wrap the below in {} so that the device deallocates memory when finished
+    // wrap the below in {} so that the device deallocates memory when finished
     {
     // need different lengths in levels one and two
     deviceVector<ComplexD* > As2(contractions - level_1_contractions); // again these are the source meson fields
