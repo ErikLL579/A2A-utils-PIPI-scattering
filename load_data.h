@@ -4,7 +4,7 @@
 
 using namespace Grid;
 
-typedef Eigen::Matrix<ComplexF, -1, -1, Eigen::RowMajor> MesonFieldMatrix;
+typedef Eigen::Matrix<ComplexD, -1, -1, Eigen::RowMajor> MesonFieldMatrix;
 
 /******************************************************************************
  *               Load binned A2A vectors from SCIDAC multiFile format         *
