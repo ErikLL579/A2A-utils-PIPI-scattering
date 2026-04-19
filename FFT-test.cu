@@ -72,6 +72,7 @@ int main(int argc, char *argv[])
  PipiA2Autils<WilsonImplR>::FFT_type1_prod( &phi_mu[0],
                                             &phi1[0],
                                             &phi2[0],
+                                            VDIM,
                                             Gmu);
 
  stop = usecond();

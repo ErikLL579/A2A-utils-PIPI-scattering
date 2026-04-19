@@ -143,6 +143,7 @@ public:
   static void FFT_type1_prod( ComplexField *phi_mu,
   		              const FermionField *Ai,
 		              const FermionField *Bj,
+                              const int Nmodes,
 		              const std::vector<Gamma::Algebra> gammas);
 
 
@@ -453,7 +454,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     GridBLAS blas;
     
     int timeslices  = Mesonfield.dimension(1);
-    int Nmodes = Mesonfield.dimension(1);
+    int Nmodes = Mesonfield.dimension(2);
     
     // total number of pion meson fields stored on device
     int num_matrices = timeslices;
@@ -537,7 +538,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "=================================================== " << endl;
     cout << GridLogMessage << "=================================================== " << endl;
 
-    acceleratorCopyFromDevice(&C[0], Result_round_1.data(), Nmodes * Nmodes * sizeof(ComplexD) * (contractions - level_1_contractions) );
+    acceleratorCopyFromDevice(&C[0], Result_round_1.data(), Nmodes * Nmodes * sizeof(ComplexD) * (level_1_contractions) );
 
     // end variable scope
     }
@@ -615,6 +616,7 @@ template <class FImpl>                   // should be std vector but can just po
 void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
                                           const FermionField *Ai,
                                           const FermionField *Bj,
+                                          const int Nmodes,
                                           const std::vector<Gamma::Algebra> gammas)
 {
 
@@ -644,7 +646,7 @@ void PipiA2Autils<FImpl>::FFT_type1_prod( ComplexField *phi_mu,
   cout << GridLogMessage << "============================" << endl;
 
   // adjust this to be dynamic based on input
-  const int Nmodes = 10;
+  //const int Nmodes = 10;
   // number of blocks (adjust to keep GPU memory ~80% full)
   // const int blocks = (Nmodes + block - 1 ) / block ; 
 
@@ -713,12 +715,15 @@ void PipiA2Autils<FImpl>::FFT_type1_convolve(ComplexD &Result,
 
   vector<ComplexField> tilde_phi1_mu(Nd, grid);
   vector<ComplexField> tilde_phi_phtn_nu(Nd, grid);
+  for (int rho=0; rho<Nd; rho++) tilde_phi_phtn_nu[rho] = Zero();
+
   vector<ComplexField> phi_phtn_nu(Nd, grid);
 
   //FFT theFFT(&grid);
   FFT theFFT(dynamic_cast<GridCartesian *>(grid));
 
   for(int mu=0; mu<Nd; mu++) theFFT.FFT_all_dim(tilde_phi1_mu[mu], phi1_mu[mu], FFT::forward);
+
 
   for(int nu=0; nu<Nd; nu++) {
     for(int mu=0; mu<Nd; mu++) {
@@ -773,12 +778,17 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
   FFT theFFT(dynamic_cast<GridCartesian *>(grid));
 
   for(int i2=0; i2<Nmodes; i2++){
+
+    Vector<FermionField> v_g_nu(Ngamma, grid);
+    for(int kk=0; kk<Ngamma; kk++) v_g_nu[kk] = Gamma(gammas[kk]) * vi[i2];
+
     for(int i3=0; i3<Nmodes; i3++) {
 
+      for (int rho=0; rho<Ngamma; rho++) Kg_i3i2_mu_phtn[rho] = Zero();
 
       for(int nu=0; nu<Ngamma; nu++) {
-        FermionField tmp = Gamma(gammas[nu]) * vi[i2] ;
-        g_i3i2_nu[nu] = localInnerProduct(wi[i3], tmp);
+        //FermionField tmp = Gamma(gammas[nu]) * vi[i2] ; // this can be moved outside of i3 loop
+        g_i3i2_nu[nu] = localInnerProduct(wi[i3], v_g_nu[nu]);
         // using g_i3i2_nu as Kg_i3i2_nu for mem
         theFFT.FFT_all_dim(g_i3i2_nu[nu], g_i3i2_nu[nu], FFT::forward);
 
@@ -807,6 +817,5 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
 
 
 NAMESPACE_END(Grid);
-
 
 
