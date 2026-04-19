@@ -790,7 +790,7 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
         theFFT.FFT_all_dim(g_i3i2_nu[mu], Kg_i3i2_mu_phtn[mu], FFT::backward);
         FermionField tmp = Gamma(gammas[mu]) * Bi[i3];
         ComplexField ttmp = localInnerProduct(Ai[i2], tmp);
-        Result += innerProduct(g_i3i2_nu[mu], ttmp ) ;
+        Result += 0;//innerProduct(g_i3i2_nu[mu], ttmp ) ;
       }
     }
   }
