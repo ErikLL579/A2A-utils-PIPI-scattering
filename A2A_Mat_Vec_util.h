@@ -177,6 +177,18 @@ static void FFT_type2_contract_convolve_claude(ComplexD &Result,
                                         const ComplexField *phtn_prop_mu_nu,
                                         const std::vector<Gamma::Algebra> gammas);
 
+// Chunked batched-FFT + Parseval version: batches BATCH i3 values into a single
+// 8*BATCH-component FFT call (4 gammas * 2 bilinears * BATCH i3 values).
+// Eliminates backward FFTs entirely via Parseval's theorem.
+static void FFT_type2_contract_convolve_claude_level2(ComplexD &Result,
+                                        const FermionField *Ai,
+                                        const FermionField *Bi,
+                                        const FermionField *wi,
+                                        const FermionField *vi,
+                                        const int Nmodes,
+                                        const ComplexField *phtn_prop_mu_nu,
+                                        const std::vector<Gamma::Algebra> gammas);
+
 };
 
 /////////////////////////////////////////////////////////////////////////
@@ -199,6 +211,16 @@ template<typename vtype> using iVec4Complex = iVector<iScalar<iScalar<vtype> >, 
 typedef iVec4Complex<Complex  >             Vec4Complex;
 typedef iVec4Complex<vComplex >             vVec4Complex;
 typedef Lattice<vVec4Complex>               LatticeVec4Complex;
+
+// Batch size for chunked FFT: process FFT_BATCH i3 values per FFT call.
+// 8 components per i3 (4 gammas x 2 bilinears). Tune based on GPU memory.
+// 24^3x64 lattice: ~7 MB/ComplexField/rank, so 8*BATCH * 7 MB per packed field.
+// BATCH=64 => ~3.5 GB per packed field. Safe on 40 GB A100.
+const int FFT_BATCH = 10;
+template<typename vtype> using iBatchComplex = iVector<iScalar<iScalar<vtype> >, 8*FFT_BATCH>;
+typedef iBatchComplex<Complex  >             BatchComplex;
+typedef iBatchComplex<vComplex >             vBatchComplex;
+typedef Lattice<vBatchComplex>               LatticeBatchComplex;
 
 #define A2A_GPU_KERNELS
 
@@ -924,6 +946,132 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve_claude(ComplexD &Result,
   cout << GridLogMessage << "COMPLETE: FFT TYPE 2 CONV + CONT (BATCHED)" << endl;
   cout << GridLogMessage << "===============================" << endl;
   cout << GridLogMessage << "===============================" << endl;
+
+};
+
+
+// Chunked batched-FFT + Parseval version of FFT_type2_contract_convolve.
+// Batches FFT_BATCH i3 values into one FFT call with 8*FFT_BATCH components
+// (4 gammas × 2 bilinears × FFT_BATCH i3 values).
+// Eliminates backward FFTs via Parseval: innerProduct(IFFT[Kg], h) = (1/V) * innerProduct(Kg, FFT[h]).
+//
+// Component layout in the packed field:
+//   [0 .. 4*BATCH-1]         : first bilinears  g_nu^{i3}  = <w_{i3}|gamma_nu|v_{i2}>
+//   [4*BATCH .. 8*BATCH-1]   : second bilinears h_mu^{i3}  = <A_{i2}|gamma_mu|B_{i3}>
+// Within each group of 4: index = gamma index (nu or mu = 0,1,2,3)
+template <class FImpl>
+void PipiA2Autils<FImpl>::FFT_type2_contract_convolve_claude_level2(ComplexD &Result,
+                                                      const FermionField *Ai,
+                                                      const FermionField *Bi,
+                                                      const FermionField *wi,
+                                                      const FermionField *vi,
+                                                      const int Nmodes,
+                                                      const ComplexField *phtn_prop_mu_nu,
+                                                      const std::vector<Gamma::Algebra> gammas)
+{
+
+  cout << GridLogMessage << "============================================" << endl;
+  cout << GridLogMessage << "BEGIN: FFT TYPE 2 CONV + CONT (CHUNKED BATCH)" << endl;
+  cout << GridLogMessage << "============================================" << endl;
+
+  GridBase *grid = Ai[0].Grid();
+
+  int Ngamma = gammas.size();
+  int Nd = grid->Dimensions();
+  GRID_ASSERT(Ngamma == 4);
+
+  const int BATCH = FFT_BATCH;
+
+  // Lattice volume for Parseval normalization
+  // Grid forward FFT is unnormalized, backward divides by V.
+  // Parseval: sum_x conj(f(x)) g(x) = (1/V) sum_k conj(f~(k)) g~(k)
+  double vol = 1.0;
+  for(int d=0; d<Nd; d++) vol *= grid->FullDimensions()[d];
+  RealD inv_vol = 1.0 / vol;
+
+  // Packed field: 8*BATCH components
+  LatticeBatchComplex packed(grid);
+  LatticeBatchComplex packed_fft(grid);
+
+  // Temporary ComplexFields for unpacking and photon contraction
+  vector<ComplexField> g_tilde_nu(Ngamma, grid);  // FFT of first bilinear per i3
+  vector<ComplexField> Kg_mu(Ngamma, grid);       // after photon contraction per i3
+  vector<ComplexField> h_tilde_mu(Ngamma, grid);  // FFT of second bilinear per i3
+
+  FFT theFFT(dynamic_cast<GridCartesian *>(grid));
+
+  for(int i2=0; i2<Nmodes; i2++){
+
+    // precompute gamma * v_{i2} for all nu (hoisted out of i3 loop)
+    vector<FermionField> v_g_nu(Ngamma, grid);
+    for(int nu=0; nu<Ngamma; nu++) v_g_nu[nu] = Gamma(gammas[nu]) * vi[i2];
+
+    for(int i3_base=0; i3_base < Nmodes; i3_base += BATCH) {
+
+      int i3_end = min(i3_base + BATCH, Nmodes);
+      int chunk = i3_end - i3_base; // active i3 values in this chunk
+
+      // ---- Pack all bilinears for this chunk ----
+      // Zero the packed field so unused slots (if chunk < BATCH) are clean
+      packed = Zero();
+
+      for(int b=0; b < chunk; b++) {
+        int i3 = i3_base + b;
+
+        // First bilinear: g_nu = <w_{i3} | gamma_nu | v_{i2}>
+        // goes into components [4*b .. 4*b+3]
+        for(int nu=0; nu<Ngamma; nu++) {
+          ComplexField g_nu(grid);
+          g_nu = localInnerProduct(wi[i3], v_g_nu[nu]);
+          PokeIndex<0>(packed, g_nu, 4*b + nu);
+        }
+
+        // Second bilinear: h_mu = <A_{i2} | gamma_mu | B_{i3}>
+        // goes into components [4*BATCH + 4*b .. 4*BATCH + 4*b+3]
+        for(int mu=0; mu<Ngamma; mu++) {
+          FermionField tmp = Gamma(gammas[mu]) * Bi[i3];
+          ComplexField h_mu(grid);
+          h_mu = localInnerProduct(Ai[i2], tmp);
+          PokeIndex<0>(packed, h_mu, 4*BATCH + 4*b + mu);
+        }
+      }
+
+      // ---- Single forward FFT for entire chunk ----
+      theFFT.FFT_all_dim(packed_fft, packed, FFT::forward);
+
+      // ---- Unpack, photon contract, and combine per i3 in chunk ----
+      for(int b=0; b < chunk; b++) {
+
+        // Unpack FFT of first bilinears
+        for(int nu=0; nu<Ngamma; nu++) {
+          g_tilde_nu[nu] = PeekIndex<0>(packed_fft, 4*b + nu);
+        }
+
+        // Photon propagator contraction: Kg_mu = sum_nu g~_nu * Delta~_{nu,mu}
+        for(int mu=0; mu<Ngamma; mu++) {
+          Kg_mu[mu] = g_tilde_nu[0] * phtn_prop_mu_nu[0*Nd + mu];
+          for(int nu=1; nu<Ngamma; nu++) {
+            Kg_mu[mu] = Kg_mu[mu] + g_tilde_nu[nu] * phtn_prop_mu_nu[nu*Nd + mu];
+          }
+        }
+
+        // Unpack FFT of second bilinears
+        for(int mu=0; mu<Ngamma; mu++) {
+          h_tilde_mu[mu] = PeekIndex<0>(packed_fft, 4*BATCH + 4*b + mu);
+        }
+
+        // Parseval combination: innerProduct(IFFT[Kg], h) = (1/V) * innerProduct(Kg, FFT[h])
+        for(int mu=0; mu<Ngamma; mu++) {
+          Result += inv_vol * innerProduct(Kg_mu[mu], h_tilde_mu[mu]);
+        }
+      }
+
+    } // i3_base
+  } // i2
+
+  cout << GridLogMessage << "============================================" << endl;
+  cout << GridLogMessage << "COMPLETE: FFT TYPE 2 CONV + CONT (CHUNKED BATCH)" << endl;
+  cout << GridLogMessage << "============================================" << endl;
 
 };
 
