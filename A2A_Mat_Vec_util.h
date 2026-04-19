@@ -894,6 +894,10 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve_claude(ComplexD &Result,
 
   FFT theFFT(dynamic_cast<GridCartesian *>(grid));
 
+  GridStopWatch sw;
+  double t_bilinear1 = 0, t_fft_fwd = 0, t_unpack = 0;
+  double t_photon = 0, t_fft_bwd = 0, t_combine = 0;
+
   for(int i2=0; i2<Nmodes; i2++){
 
     // precompute gamma * v_{i2} for all nu (hoisted out of i3 loop)
@@ -903,48 +907,66 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve_claude(ComplexD &Result,
     for(int i3=0; i3<Nmodes; i3++) {
 
       // ---- Forward FFT: pack all 4 bilinears, FFT once ----
+      sw.Start();
       for(int nu=0; nu<Ngamma; nu++) {
         g_i3i2_nu[nu] = localInnerProduct(wi[i3], v_g_nu[nu]);
         PokeIndex<0>(g_packed, g_i3i2_nu[nu], nu);
       }
+      sw.Stop(); t_bilinear1 += sw.Elapsed().count(); sw.Reset();
 
+      sw.Start();
       theFFT.FFT_all_dim(g_packed_fft, g_packed, FFT::forward);
+      sw.Stop(); t_fft_fwd += sw.Elapsed().count(); sw.Reset();
 
       // unpack FFT results
+      sw.Start();
       for(int nu=0; nu<Ngamma; nu++) {
         g_i3i2_nu[nu] = PeekIndex<0>(g_packed_fft, nu);
       }
+      sw.Stop(); t_unpack += sw.Elapsed().count(); sw.Reset();
 
       // ---- Photon propagator contraction in momentum space ----
+      sw.Start();
       for(int mu=0; mu<Ngamma; mu++) {
         Kg_i3i2_mu[mu] = g_i3i2_nu[0] * phtn_prop_mu_nu[0*Nd + mu];
         for(int nu=1; nu<Ngamma; nu++) {
           Kg_i3i2_mu[mu] = Kg_i3i2_mu[mu] + g_i3i2_nu[nu] * phtn_prop_mu_nu[nu*Nd + mu];
         }
       }
+      sw.Stop(); t_photon += sw.Elapsed().count(); sw.Reset();
 
       // ---- Backward FFT: pack all 4 Kg_mu, IFFT once ----
+      sw.Start();
       for(int mu=0; mu<Ngamma; mu++) {
         PokeIndex<0>(Kg_packed, Kg_i3i2_mu[mu], mu);
       }
 
       theFFT.FFT_all_dim(Kg_packed_ifft, Kg_packed, FFT::backward);
+      sw.Stop(); t_fft_bwd += sw.Elapsed().count(); sw.Reset();
 
       // ---- Combine with second bilinear ----
+      sw.Start();
       for(int mu=0; mu<Ngamma; mu++) {
         ComplexField Kg_mu = PeekIndex<0>(Kg_packed_ifft, mu);
         FermionField tmp = Gamma(gammas[mu]) * Bi[i3];
         ComplexField ttmp = localInnerProduct(Ai[i2], tmp);
         Result += innerProduct(Kg_mu, ttmp);
       }
+      sw.Stop(); t_combine += sw.Elapsed().count(); sw.Reset();
 
     }
   }
 
+  double t_total = t_bilinear1 + t_fft_fwd + t_unpack + t_photon + t_fft_bwd + t_combine;
   cout << GridLogMessage << "===============================" << endl;
-  cout << GridLogMessage << "===============================" << endl;
-  cout << GridLogMessage << "COMPLETE: FFT TYPE 2 CONV + CONT (BATCHED)" << endl;
-  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "FFT TYPE 2 TIMING BREAKDOWN" << endl;
+  cout << GridLogMessage << "  Bilinear <w|g|v> + pack: " << t_bilinear1 << " s (" << 100*t_bilinear1/t_total << "%)" << endl;
+  cout << GridLogMessage << "  FFT forward:             " << t_fft_fwd   << " s (" << 100*t_fft_fwd/t_total   << "%)" << endl;
+  cout << GridLogMessage << "  Unpack:                  " << t_unpack    << " s (" << 100*t_unpack/t_total     << "%)" << endl;
+  cout << GridLogMessage << "  Photon contraction:      " << t_photon    << " s (" << 100*t_photon/t_total     << "%)" << endl;
+  cout << GridLogMessage << "  FFT backward:            " << t_fft_bwd   << " s (" << 100*t_fft_bwd/t_total   << "%)" << endl;
+  cout << GridLogMessage << "  Combine <A|g|B> + sum:   " << t_combine   << " s (" << 100*t_combine/t_total   << "%)" << endl;
+  cout << GridLogMessage << "  TOTAL:                   " << t_total     << " s" << endl;
   cout << GridLogMessage << "===============================" << endl;
 
 };
