@@ -31,7 +31,7 @@ void loadBinnedA2AVecs(std::vector<FermionField> &vec,
                        const int trajectory,
                        GridBase *grid)
 {
-    typedef typename FermionField::vector_object::element::element vector_type;
+    typedef typename FermionField::vector_object::vector_type vector_type;
     typedef iVector<iVector<iVector<vector_type, Nc>, Ns>, binSize> SiteSpinorSet;
     typedef Lattice<SiteSpinorSet> BinnedField;
 

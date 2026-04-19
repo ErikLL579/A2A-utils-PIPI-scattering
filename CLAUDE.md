@@ -48,8 +48,10 @@ python3 autocontraction-symbolic-manipulation/optimize_products.py <name>_mom.tx
   - `ContractMesonFieldAndVector`: Matrix-vector contraction producing fermion field with one outstanding A2A index
   - `MesonField_MesonField_connected/disconnected`: Batched BLAS trace operations Tr(Pi·Pi) for connected/disconnected diagrams with two-level contraction support. Level 2 uses per-operand `buffer_flag_A`/`buffer_flag_B` vectors (0 = source buffer `A`, 1 = Level 1 result buffer `C`) to handle mixed and C×C products.
   - `FFT_type1_prod/convolve`: FFT-based contraction strategies (see Appendix B/C of notes)
-  - `FFT_type2_contract_convolve`: Combined contraction and convolution with photon propagator
-  - Custom lattice types: `LatticeVecSpinMatrix`, `LatticeVecComplex` using `A2Ablocking=8`
+  - `FFT_type2_contract_convolve`: Combined contraction and convolution with photon propagator (original, one FFT per gamma per mode pair)
+  - `FFT_type2_contract_convolve_claude`: Batched-FFT version — packs all 4 gamma components into a `LatticeVec4Complex` so Grid's `FFT_all_dim` calls `cufftPlanMany` with `howmany=4*Nperp`, reducing 8 FFT calls to 2 per `(i2,i3)`. ~3x speedup observed at test scale.
+  - `FFT_type2_contract_convolve_claude_level2`: Chunked batch + Parseval version — batches `FFT_BATCH` i3 values into a single `8*FFT_BATCH`-component FFT call and eliminates backward FFTs via Parseval's theorem (`innerProduct(IFFT[Kg], h) = (1/V) * innerProduct(Kg, FFT[h])`). Currently slower than `_claude` at small scale (Nmodes=20, 1 node) due to larger memory footprint per FFT call. Expected to help at production scale (Nmodes=2700, multi-node) where MPI latency dominates. Tune `FFT_BATCH` (default 10) based on GPU memory and mode count.
+  - Custom lattice types: `LatticeVecSpinMatrix`, `LatticeVecComplex` (`A2Ablocking=8`), `LatticeVec4Complex` (4 components for gamma batching), `LatticeBatchComplex` (`8*FFT_BATCH` components for chunked batching)
 
 - **`IV-photon-props.h`** — `IVPhotonPropagator<FImpl>` class for **infinite-volume** (continuum `1/k²`) QED photon propagators. This is distinct from Grid's built-in `Photon` class (`Grid/qcd/action/gauge/Photon.h`) which uses finite-volume lattice momentum `k_hat = 2 sin(πn/L)`. Contains:
   - Feynman gauge: diagonal `δ_μν/k²` (momentum) + FFT (position)
