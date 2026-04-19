@@ -161,6 +161,7 @@ static void FFT_type2_contract_convolve(ComplexD &Result,
                                         const FermionField *Bi,
                                         const FermionField *wi, 
                                         const FermionField *vi,
+                                        const int Nmodes,
                                         const ComplexField *phtn_prop_mu_nu,
                                         const std::vector<Gamma::Algebra> gammas);
 
@@ -747,6 +748,7 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
                                                       const FermionField *Bi,
                                                       const FermionField *wi,
                                                       const FermionField *vi,
+					              const int Nmodes,
                                                       const ComplexField *phtn_prop_mu_nu,
                                                       const std::vector<Gamma::Algebra> gammas)
 {
@@ -762,8 +764,6 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
   
   int Ngamma = gammas.size();
   int Nd = grid->Dimensions();
-  // placeholder number mode
-  const int Nmodes = 10;
 
   vector<ComplexField> g_i3i2_nu(Ngamma, grid);
 
@@ -776,20 +776,14 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
     for(int i3=0; i3<Nmodes; i3++) {
 
 
-     cout << GridLogMessage << "=========== PRE FFTs ================"<<  " i2 = "<< i2 << " i3 = " << i3 << endl;
-
       for(int nu=0; nu<Ngamma; nu++) {
         FermionField tmp = Gamma(gammas[nu]) * vi[i2] ;
         g_i3i2_nu[nu] = localInnerProduct(wi[i3], tmp);
-        
         // using g_i3i2_nu as Kg_i3i2_nu for mem
         theFFT.FFT_all_dim(g_i3i2_nu[nu], g_i3i2_nu[nu], FFT::forward);
 
 	for(int mu=0; mu<Ngamma; mu++) Kg_i3i2_mu_phtn[mu] = Kg_i3i2_mu_phtn[mu] + g_i3i2_nu[nu] * phtn_prop_mu_nu[nu*Nd + mu];
-        //for(int mu=0; mu<Ngamma; mu++) {Kg_i3i2_mu_phtn[mu] = g_i3i2_nu[nu] * phtn_prop_mu_nu[nu*Nd + mu];} // this is just for debug
       }
-
-      cout << GridLogMessage << "=========== PRE COMBINING RESULTS================"<<  " i2 = "<< i2 << " i3 = " << i3 << endl;
 
       for(int mu=0; mu<Ngamma; mu++) {
         // using g_i3_i2_nu as G_i3i2_mu for mem
@@ -799,7 +793,6 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
         Result += innerProduct(g_i3i2_nu[mu], ttmp ) ;
       }
 
-    cout << GridLogMessage << "=========== POST COMBINING RESULTS================"<<  " i2 = "<< i2 << " i3 = " << i3 << endl;
 
     }
   }
@@ -814,5 +807,6 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
 
 
 NAMESPACE_END(Grid);
+
 
 
