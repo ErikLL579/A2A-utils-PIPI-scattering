@@ -25,7 +25,7 @@ nvcc matrix-vector-test.cu $($GRID --cxxflags) $($GRID --ldflags) $($GRID --libs
 
 ### Run with MPI:
 ```bash
-srun -n 2 -N 1 --ntasks-per-node=2 --gpus-per-task=1 --gpu-bind=single:1 ./test --mpi 1.1.1.2
+srun -n 2 -N 1 --ntasks-per-node=2 --gpus-per-task=1 --gpu-bind=none ./test --mpi 1.1.1.2
 ```
 
 ### Python symbolic manipulation:
@@ -168,6 +168,10 @@ The workload has ~2700 A2A vectors (lattice fermion fields) and meson field matr
 - Each rank holds 1/N of each lattice field's volume, so memory is automatically distributed.
 - Grid's I/O routines (`BinaryIO`, ILDG) are MPI-aware — each rank reads only its local portion.
 - Lattice dimensions must be divisible by the corresponding MPI dimensions.
+
+### GPU binding on Perlmutter
+
+**Must use `--gpu-bind=none`, NOT `--gpu-bind=single:1`.** Grid's FFT uses `Cshift` → `MPI_Sendrecv` with GPU pointers for inter-rank communication. Cray MPICH's GPU Transport Layer (GTL) uses CUDA IPC (`cuIpcOpenMemHandle`) for same-node transfers, which requires all GPUs to be visible to all ranks. `--gpu-bind=single:1` restricts `CUDA_VISIBLE_DEVICES` so each rank only sees its own GPU, causing `cuIpcOpenMemHandle: CUDA_ERROR_INVALID_VALUE`. Grid's `--enable-setdevice` (used in our build) handles GPU assignment via `cudaSetDevice`, so Slurm only needs to *allocate* GPUs (`--gpus-per-task=1`), not restrict visibility.
 
 **Alternative considered and rejected for now:** Mode-index distribution (`--enable-comms=none` + manual `MPI_Init`/`MPI_Comm_rank`). Each rank holds the full volume but only a subset of A2A vectors. Eliminates FFT communication entirely but requires manual MPI code and custom I/O. Would only be worth it if FFT communication proves to be a bottleneck after profiling.
 

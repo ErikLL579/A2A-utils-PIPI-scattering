@@ -157,10 +157,21 @@ public:
 
 // FFT_type2_prod_and_convolve
 
-static void FFT_type2_contract_convolve(ComplexD &Result, 
+static void FFT_type2_contract_convolve(ComplexD &Result,
                                         const FermionField *Ai,
                                         const FermionField *Bi,
-                                        const FermionField *wi, 
+                                        const FermionField *wi,
+                                        const FermionField *vi,
+                                        const int Nmodes,
+                                        const ComplexField *phtn_prop_mu_nu,
+                                        const std::vector<Gamma::Algebra> gammas);
+
+// Batched-FFT version: packs all 4 gamma components into a single
+// 4-component lattice field so Grid's FFT processes them in one cufftPlanMany call.
+static void FFT_type2_contract_convolve_claude(ComplexD &Result,
+                                        const FermionField *Ai,
+                                        const FermionField *Bi,
+                                        const FermionField *wi,
                                         const FermionField *vi,
                                         const int Nmodes,
                                         const ComplexField *phtn_prop_mu_nu,
@@ -182,6 +193,12 @@ template<typename vtype> using iVecComplex = iVector<iScalar<iScalar<vtype> >, A
 typedef iVecComplex<Complex  >             VecComplex;
 typedef iVecComplex<vComplex >             vVecComplex;
 typedef Lattice<vVecComplex>               LatticeVecComplex;
+
+// 4-component complex vector for batching Ngamma=4 FFTs into one cufftPlanMany call
+template<typename vtype> using iVec4Complex = iVector<iScalar<iScalar<vtype> >, 4>;
+typedef iVec4Complex<Complex  >             Vec4Complex;
+typedef iVec4Complex<vComplex >             vVec4Complex;
+typedef Lattice<vVec4Complex>               LatticeVec4Complex;
 
 #define A2A_GPU_KERNELS
 
@@ -810,6 +827,101 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve(ComplexD &Result,
   cout << GridLogMessage << "===============================" << endl;
   cout << GridLogMessage << "===============================" << endl;
   cout << GridLogMessage << "COMPLETE: FFT TYPE 2 CONV + CONT" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+
+};
+
+
+// Batched-FFT version of FFT_type2_contract_convolve
+// Packs all 4 gamma components into a LatticeVec4Complex so that
+// Grid's FFT_all_dim calls cufftPlanMany with howmany=4*Nperp
+// instead of howmany=Nperp, reducing 8 FFT calls to 2 per (i2,i3).
+template <class FImpl>
+void PipiA2Autils<FImpl>::FFT_type2_contract_convolve_claude(ComplexD &Result,
+                                                      const FermionField *Ai,
+                                                      const FermionField *Bi,
+                                                      const FermionField *wi,
+                                                      const FermionField *vi,
+                                                      const int Nmodes,
+                                                      const ComplexField *phtn_prop_mu_nu,
+                                                      const std::vector<Gamma::Algebra> gammas)
+{
+
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "BEGIN: FFT TYPE 2 CONV + CONT (BATCHED)" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+
+  GridBase *grid = Ai[0].Grid();
+
+  int Ngamma = gammas.size();
+  int Nd = grid->Dimensions();
+  GRID_ASSERT(Ngamma == 4);
+
+  // Packed 4-component fields for batched FFT
+  LatticeVec4Complex g_packed(grid);
+  LatticeVec4Complex g_packed_fft(grid);
+  LatticeVec4Complex Kg_packed(grid);
+  LatticeVec4Complex Kg_packed_ifft(grid);
+
+  // Unpacked fields for the photon contraction and final combination
+  vector<ComplexField> g_i3i2_nu(Ngamma, grid);
+  vector<ComplexField> Kg_i3i2_mu(Ngamma, grid);
+
+  FFT theFFT(dynamic_cast<GridCartesian *>(grid));
+
+  for(int i2=0; i2<Nmodes; i2++){
+
+    // precompute gamma * v_{i2} for all nu (hoisted out of i3 loop)
+    vector<FermionField> v_g_nu(Ngamma, grid);
+    for(int nu=0; nu<Ngamma; nu++) v_g_nu[nu] = Gamma(gammas[nu]) * vi[i2];
+
+    for(int i3=0; i3<Nmodes; i3++) {
+
+      // ---- Forward FFT: pack all 4 bilinears, FFT once ----
+      for(int nu=0; nu<Ngamma; nu++) {
+        g_i3i2_nu[nu] = localInnerProduct(wi[i3], v_g_nu[nu]);
+        PokeIndex<0>(g_packed, g_i3i2_nu[nu], nu);
+      }
+
+      theFFT.FFT_all_dim(g_packed_fft, g_packed, FFT::forward);
+
+      // unpack FFT results
+      for(int nu=0; nu<Ngamma; nu++) {
+        g_i3i2_nu[nu] = PeekIndex<0>(g_packed_fft, nu);
+      }
+
+      // ---- Photon propagator contraction in momentum space ----
+      for(int mu=0; mu<Ngamma; mu++) {
+        Kg_i3i2_mu[mu] = g_i3i2_nu[0] * phtn_prop_mu_nu[0*Nd + mu];
+        for(int nu=1; nu<Ngamma; nu++) {
+          Kg_i3i2_mu[mu] = Kg_i3i2_mu[mu] + g_i3i2_nu[nu] * phtn_prop_mu_nu[nu*Nd + mu];
+        }
+      }
+
+      // ---- Backward FFT: pack all 4 Kg_mu, IFFT once ----
+      for(int mu=0; mu<Ngamma; mu++) {
+        PokeIndex<0>(Kg_packed, Kg_i3i2_mu[mu], mu);
+      }
+
+      theFFT.FFT_all_dim(Kg_packed_ifft, Kg_packed, FFT::backward);
+
+      // ---- Combine with second bilinear ----
+      for(int mu=0; mu<Ngamma; mu++) {
+        ComplexField Kg_mu = PeekIndex<0>(Kg_packed_ifft, mu);
+        FermionField tmp = Gamma(gammas[mu]) * Bi[i3];
+        ComplexField ttmp = localInnerProduct(Ai[i2], tmp);
+        Result += innerProduct(Kg_mu, ttmp);
+      }
+
+    }
+  }
+
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "===============================" << endl;
+  cout << GridLogMessage << "COMPLETE: FFT TYPE 2 CONV + CONT (BATCHED)" << endl;
   cout << GridLogMessage << "===============================" << endl;
   cout << GridLogMessage << "===============================" << endl;
 

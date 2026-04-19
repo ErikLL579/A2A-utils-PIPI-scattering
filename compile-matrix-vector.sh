@@ -12,4 +12,4 @@ nvcc FFT-test.cu \
   -o FFttest
 
 
-# example multiple MPI rank execute: srun -n 2 -N 1 --ntasks-per-node=2 --gpus-per-task=1 --gpu-bind=single:1 ./test --mpi 1.1.1.2
+# example multiple MPI rank execute: srun -n 2 -N 1 --ntasks-per-node=2 --gpus-per-task=1 --gpu-bind=none ./test --mpi 1.1.1.2
