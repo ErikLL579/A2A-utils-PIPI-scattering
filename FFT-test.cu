@@ -119,7 +119,7 @@ int main(int argc, char *argv[])
   Result = Complex(0.0, 0.0);
 
   start = usecond();
-  PipiA2Autils<WilsonImplR>::FFT_type2_contract_convolve(Result,
+  PipiA2Autils<WilsonImplR>::FFT_type2_contract_convolve_claude(Result,
   							 &phi1[0], &phi2[0], &phi3[0], &phi4[0],
                                                          VDIM,
 							 &phtn_mu_nu[0],

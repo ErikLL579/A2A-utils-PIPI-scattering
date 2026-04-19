@@ -4,7 +4,8 @@ GRID=/global/cfs/cdirs/mp13/lundstrum/Grid-231225/Grid-install-GPU-041726/bin/gr
 
 # or -x cu if text.cc
 #nvcc matrix-vector-test.cu \
-nvcc FFT-test.cu \
+#nvcc FFT-test.cu \
+nvcc load-data-test.cu \
   $($GRID --cxxflags) \
   $($GRID --ldflags) \
   $($GRID --libs) \
