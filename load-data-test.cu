@@ -49,8 +49,8 @@ int main(int argc, char *argv[])
   std::vector<FermionField> wl(Nmodes, &grid);
   std::vector<FermionField> vl(Nmodes, &grid);
 
-  loadBinnedA2AVecs<173>(wl, "/global/cfs/cdirs/mp13/lundstrum/Masaaki_data/forErik/vw/vl_grid.173.5070", 5070, &grid);
-  loadBinnedA2AVecs<173>(vl, "/global/cfs/cdirs/mp13/lundstrum/Masaaki_data/forErik/vw/vl_grid.173.5070", 5070, &grid);
+  loadBinnedA2AVecs<173>(wl, "/global/cfs/cdirs/mp13/lundstrum/Masaaki_data/forErik/vw/vl_grid.173", 5070, &grid);
+  loadBinnedA2AVecs<173>(vl, "/global/cfs/cdirs/mp13/lundstrum/Masaaki_data/forErik/vw/vl_grid.173", 5070, &grid);
 
 
   // epilogue

@@ -216,7 +216,7 @@ typedef Lattice<vVec4Complex>               LatticeVec4Complex;
 // 8 components per i3 (4 gammas x 2 bilinears). Tune based on GPU memory.
 // 24^3x64 lattice: ~7 MB/ComplexField/rank, so 8*BATCH * 7 MB per packed field.
 // BATCH=64 => ~3.5 GB per packed field. Safe on 40 GB A100.
-const int FFT_BATCH = 10;
+const int FFT_BATCH = 5;
 template<typename vtype> using iBatchComplex = iVector<iScalar<iScalar<vtype> >, 8*FFT_BATCH>;
 typedef iBatchComplex<Complex  >             BatchComplex;
 typedef iBatchComplex<vComplex >             vBatchComplex;
@@ -1099,5 +1099,6 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve_claude_level2(ComplexD &Re
 
 
 NAMESPACE_END(Grid);
+
 
 
