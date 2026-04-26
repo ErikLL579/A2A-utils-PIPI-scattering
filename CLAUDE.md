@@ -51,19 +51,21 @@ python3 autocontraction-symbolic-manipulation/optimize_products.py <name>_mom.tx
   - `FFT_type2_contract_convolve`: Combined contraction and convolution with photon propagator (original, one FFT per gamma per mode pair)
   - `FFT_type2_contract_convolve_claude`: Batched-FFT version — packs all 4 gamma components into a `LatticeVec4Complex` so Grid's `FFT_all_dim` calls `cufftPlanMany` with `howmany=4*Nperp`, reducing 8 FFT calls to 2 per `(i2,i3)`. ~3x speedup observed at test scale.
   - `FFT_type2_contract_convolve_claude_level2`: Chunked batch + Parseval version — batches `FFT_BATCH` i3 values into a single `8*FFT_BATCH`-component FFT call and eliminates backward FFTs via Parseval's theorem (`innerProduct(IFFT[Kg], h) = (1/V) * innerProduct(Kg, FFT[h])`). Currently slower than `_claude` at small scale (Nmodes=20, 1 node) due to larger memory footprint per FFT call. Expected to help at production scale (Nmodes=2700, multi-node) where MPI latency dominates. Tune `FFT_BATCH` (default 10) based on GPU memory and mode count.
-  - Custom lattice types: `LatticeVecSpinMatrix`, `LatticeVecComplex` (`A2Ablocking=8`), `LatticeVec4Complex` (4 components for gamma batching), `LatticeBatchComplex` (`8*FFT_BATCH` components for chunked batching)
+  - Custom lattice types (all single precision, `vComplexF`): `LatticeVecSpinMatrix`, `LatticeVecComplex` (`A2Ablocking=8`), `LatticeVec4Complex` (4 components for gamma batching), `LatticeBatchComplex` (`8*FFT_BATCH` components for chunked batching)
+  - BLAS functions (`MesonField_MesonField_connected/disconnected`, `ContractMesonFieldAndVector`) use `ComplexF` device buffers and single-precision `gemmBatched`
+  - FFT functions use mixed-precision accumulation: lattice fields are single precision (`FImpl`), scalar `Result` accumulator is `ComplexD`
 
-- **`IV-photon-props.h`** — `IVPhotonPropagator<FImpl>` class for **infinite-volume** (continuum `1/k²`) QED photon propagators. This is distinct from Grid's built-in `Photon` class (`Grid/qcd/action/gauge/Photon.h`) which uses finite-volume lattice momentum `k_hat = 2 sin(πn/L)`. Contains:
+- **`IV-photon-props.h`** — `IVPhotonPropagator<FImpl>` class for **infinite-volume** (continuum `1/k²`) QED photon propagators. Single precision (`LatticeRealF` intermediates, `RealF` scalars). This is distinct from Grid's built-in `Photon` class (`Grid/qcd/action/gauge/Photon.h`) which uses finite-volume lattice momentum `k_hat = 2 sin(πn/L)`. Contains:
   - Feynman gauge: diagonal `δ_μν/k²` (momentum) + FFT (position)
   - Coulomb gauge: `D_tt = 1/|vec{p}|²`, `D_ij = (δ_ij - p_i p_j/|vec{p}|²)/p²` (momentum) + FFT (position)
-  - IR regulated via `min_momenta` cutoff
+  - IR regulated via `min_momenta` cutoff (`RealF`)
   - Grid convention: 4th index is time (`Tp`), momenta in `(-π, π]`
 
 - **`prop-test.cc`** — Validation tests for photon propagators (both gauges, both spaces)
 
 - **`load_data.h`** — Standalone header (Grid-only, no Hadrons) with two loaders:
-  - `loadMesonFields(filename, datasetName, nt)` — Reads A2A meson fields from HDF5 (`.h5`) files. Returns `std::vector<MesonFieldMatrix>` (one `Eigen::Matrix<ComplexF, Dynamic, Dynamic, RowMajor>` per timeslice). On-disk format: HDF5 dataset `<datasetName>/a2aMatrix` with shape `[nt, ni, nj]` in `ComplexF`.
-  - `loadBinnedA2AVecs<binSize>(vec, filestem, trajectory, grid)` — Reads binned A2A eigenvectors from SCIDAC/LIME multiFile format (`<filestem>.<traj>/elem0.bin`, `elem1.bin`, ...). Unpacks into a pre-sized `std::vector<FermionField>`. Template parameter `binSize` must match the data (e.g. 173 for light quarks, 196 for strange). Uses Grid's `ScidacReader` and `peekLorentz` for unpacking.
+  - `loadMesonFields(filename, datasetName, nt)` — Reads A2A meson fields from HDF5 (`.h5`) files. Returns `std::vector<MesonFieldMatrix>` (one `Eigen::Matrix<ComplexF, Dynamic, Dynamic, RowMajor>` per timeslice). Uses explicit HDF5 `ComplexF` memory type so on-disk data (double or single) is converted to single precision automatically. On-disk format: HDF5 dataset `<datasetName>/a2aMatrix` with shape `[nt, ni, nj]`.
+  - `loadBinnedA2AVecs<binSize>(vec, filestem, trajectory, grid, grid_d=nullptr)` — Reads binned A2A eigenvectors from SCIDAC/LIME multiFile format (`<filestem>.<traj>/elem0.bin`, `elem1.bin`, ...). Unpacks into a pre-sized `std::vector<FermionField>`. Template parameter `binSize` must match the data (e.g. 173 for light quarks, 196 for strange). Optional `grid_d` parameter: if provided, reads in double precision on `grid_d` then `precisionChange` converts to single precision on `grid`. If `nullptr`, reads directly at the output field's precision.
 
 ### Python Pipeline (autocontraction-symbolic-manipulation/)
 

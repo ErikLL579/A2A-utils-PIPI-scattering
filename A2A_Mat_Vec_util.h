@@ -196,15 +196,15 @@ static void FFT_type2_contract_convolve_claude_level2(ComplexD &Result,
 // the below already enters from the normal A2Autils header
 //const int A2Ablocking=8;
 
-template<typename vtype> using iVecSpinMatrix = iVector<iMatrix<iScalar<vtype>, Ns>, A2Ablocking>;
-typedef iVecSpinMatrix<ComplexF  >            VecSpinMatrix;
-typedef iVecSpinMatrix<vComplexF >            vVecSpinMatrix;
-typedef Lattice<vVecSpinMatrix>               LatticeVecSpinMatrix;
+template<typename vtype> using iVecSpinMatrixF = iVector<iMatrix<iScalar<vtype>, Ns>, A2Ablocking>;
+typedef iVecSpinMatrixF<ComplexF  >           VecSpinMatrixF;
+typedef iVecSpinMatrixF<vComplexF >           vVecSpinMatrixF;
+typedef Lattice<vVecSpinMatrixF>              LatticeVecSpinMatrixF;
 
-template<typename vtype> using iVecComplex = iVector<iScalar<iScalar<vtype> >, A2Ablocking>;
-typedef iVecComplex<ComplexF  >            VecComplex;
-typedef iVecComplex<vComplexF >            vVecComplex;
-typedef Lattice<vVecComplex>               LatticeVecComplex;
+template<typename vtype> using iVecComplexF = iVector<iScalar<iScalar<vtype> >, A2Ablocking>;
+typedef iVecComplexF<ComplexF  >           VecComplexF;
+typedef iVecComplexF<vComplexF >           vVecComplexF;
+typedef Lattice<vVecComplexF>              LatticeVecComplexF;
 
 // 4-component complex vector for batching Ngamma=4 FFTs into one cufftPlanMany call
 template<typename vtype> using iVec4Complex = iVector<iScalar<iScalar<vtype> >, 4>;
@@ -259,7 +259,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   //int Nt     = grid->GlobalDimensions()[orthogdim];
   // int Ngamma = gammas.size();
 
-  LatticeVecSpinMatrix SpinMat(grid);
+  LatticeVecSpinMatrixF SpinMat(grid);
 
   double t_view, t_gamma, t_kernel, t_momproj;
   t_view=0;
@@ -267,7 +267,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   t_kernel=0;
   t_momproj=0;
 
-  std::vector<VecSpinMatrix> sliced;
+  std::vector<VecSpinMatrixF> sliced;
 
   // meson field vector on device
   static deviceVector<ComplexF> PI(Nmodes * Nmodes);
