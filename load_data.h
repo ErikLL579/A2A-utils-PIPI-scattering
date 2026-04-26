@@ -4,7 +4,7 @@
 
 using namespace Grid;
 
-typedef Eigen::Matrix<ComplexD, -1, -1, Eigen::RowMajor> MesonFieldMatrix;
+typedef Eigen::Matrix<ComplexF, -1, -1, Eigen::RowMajor> MesonFieldMatrix;
 
 /******************************************************************************
  *               Load binned A2A vectors from SCIDAC multiFile format         *
@@ -29,12 +29,9 @@ template <int binSize, typename FermionField>
 void loadBinnedA2AVecs(std::vector<FermionField> &vec,
                        const std::string &filestem,
                        const int trajectory,
-                       GridBase *grid)
+                       GridBase *grid,
+                       GridBase *grid_d = nullptr)
 {
-    typedef typename FermionField::vector_object::vector_type vector_type;
-    typedef iVector<iVector<iVector<vector_type, Nc>, Ns>, binSize> SiteSpinorSet;
-    typedef Lattice<SiteSpinorSet> BinnedField;
-
     assert(vec.size() % binSize == 0);
     unsigned int nBins = vec.size() / binSize;
 
@@ -43,21 +40,56 @@ void loadBinnedA2AVecs(std::vector<FermionField> &vec,
     std::cout << "Loading " << vec.size() << " A2A vectors from "
               << nBins << " binned files (binSize=" << binSize << ")" << std::endl;
 
-    for (unsigned int b = 0; b < nBins; ++b)
+    if (grid_d == nullptr)
     {
-        BinnedField bvec(grid);
-        A2AVecRecord record;
-        std::string filename = dir + "/elem" + std::to_string(b) + ".bin";
+        // Same-precision load (no conversion)
+        typedef typename FermionField::vector_object::vector_type vector_type;
+        typedef iVector<iVector<iVector<vector_type, Nc>, Ns>, binSize> SiteSpinorSet;
+        typedef Lattice<SiteSpinorSet> BinnedField;
 
-        std::cout << "Reading " << filename << std::endl;
-        ScidacReader reader;
-        reader.open(filename);
-        reader.readScidacFieldRecord(bvec, record);
-        reader.close();
-
-        for (int j = 0; j < binSize; ++j)
+        for (unsigned int b = 0; b < nBins; ++b)
         {
-            vec[b * binSize + j] = peekLorentz(bvec, j);
+            BinnedField bvec(grid);
+            A2AVecRecord record;
+            std::string filename = dir + "/elem" + std::to_string(b) + ".bin";
+
+            std::cout << "Reading " << filename << std::endl;
+            ScidacReader reader;
+            reader.open(filename);
+            reader.readScidacFieldRecord(bvec, record);
+            reader.close();
+
+            for (int j = 0; j < binSize; ++j)
+            {
+                vec[b * binSize + j] = peekLorentz(bvec, j);
+            }
+        }
+    }
+    else
+    {
+        // Read in double precision on grid_d, then convert to single on grid
+        typedef iVector<iVector<iVector<vComplexD, Nc>, Ns>, binSize> SiteSpinorSetD;
+        typedef Lattice<SiteSpinorSetD> BinnedFieldD;
+
+        LatticeFermionD tmpD(grid_d);
+
+        for (unsigned int b = 0; b < nBins; ++b)
+        {
+            BinnedFieldD bvec(grid_d);
+            A2AVecRecord record;
+            std::string filename = dir + "/elem" + std::to_string(b) + ".bin";
+
+            std::cout << "Reading " << filename << std::endl;
+            ScidacReader reader;
+            reader.open(filename);
+            reader.readScidacFieldRecord(bvec, record);
+            reader.close();
+
+            for (int j = 0; j < binSize; ++j)
+            {
+                tmpD = peekLorentz(bvec, j);
+                precisionChange(vec[b * binSize + j], tmpD);
+            }
         }
     }
 
@@ -88,6 +120,12 @@ inline std::vector<MesonFieldMatrix> loadMesonFields(const std::string &filename
 
     std::vector<MesonFieldMatrix> mf(nt);
 
+    // Build memory type matching ComplexF so HDF5 converts from
+    // whatever precision is on disk (ComplexD or ComplexF) to single
+    H5NS::CompType memtype(sizeof(ComplexF));
+    memtype.insertMember("r", 0, H5NS::PredType::NATIVE_FLOAT);
+    memtype.insertMember("i", sizeof(float), H5NS::PredType::NATIVE_FLOAT);
+
     std::vector<hsize_t> count  = {1, ni, nj},
                          stride = {1, 1, 1},
                          block  = {1, 1, 1};
@@ -100,7 +138,7 @@ inline std::vector<MesonFieldMatrix> loadMesonFields(const std::string &filename
         std::vector<hsize_t> offset = {t, 0, 0};
         dataspace.selectHyperslab(H5S_SELECT_SET, count.data(), offset.data(),
                                   stride.data(), block.data());
-        dataset.read(mf[t].data(), datatype, memspace, dataspace);
+        dataset.read(mf[t].data(), memtype, memspace, dataspace);
     }
 
     std::cout << "Loaded " << filename << ": " << nt << " timeslices, "
