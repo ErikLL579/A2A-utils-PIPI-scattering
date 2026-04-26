@@ -197,29 +197,29 @@ static void FFT_type2_contract_convolve_claude_level2(ComplexD &Result,
 //const int A2Ablocking=8;
 
 template<typename vtype> using iVecSpinMatrix = iVector<iMatrix<iScalar<vtype>, Ns>, A2Ablocking>;
-typedef iVecSpinMatrix<Complex  >             VecSpinMatrix;
-typedef iVecSpinMatrix<vComplex >             vVecSpinMatrix;
+typedef iVecSpinMatrix<ComplexF  >            VecSpinMatrix;
+typedef iVecSpinMatrix<vComplexF >            vVecSpinMatrix;
 typedef Lattice<vVecSpinMatrix>               LatticeVecSpinMatrix;
 
 template<typename vtype> using iVecComplex = iVector<iScalar<iScalar<vtype> >, A2Ablocking>;
-typedef iVecComplex<Complex  >             VecComplex;
-typedef iVecComplex<vComplex >             vVecComplex;
+typedef iVecComplex<ComplexF  >            VecComplex;
+typedef iVecComplex<vComplexF >            vVecComplex;
 typedef Lattice<vVecComplex>               LatticeVecComplex;
 
 // 4-component complex vector for batching Ngamma=4 FFTs into one cufftPlanMany call
 template<typename vtype> using iVec4Complex = iVector<iScalar<iScalar<vtype> >, 4>;
-typedef iVec4Complex<Complex  >             Vec4Complex;
-typedef iVec4Complex<vComplex >             vVec4Complex;
+typedef iVec4Complex<ComplexF  >            Vec4Complex;
+typedef iVec4Complex<vComplexF >            vVec4Complex;
 typedef Lattice<vVec4Complex>               LatticeVec4Complex;
 
 // Batch size for chunked FFT: process FFT_BATCH i3 values per FFT call.
 // 8 components per i3 (4 gammas x 2 bilinears). Tune based on GPU memory.
-// 24^3x64 lattice: ~7 MB/ComplexField/rank, so 8*BATCH * 7 MB per packed field.
-// BATCH=64 => ~3.5 GB per packed field. Safe on 40 GB A100.
+// 24^3x64 lattice: ~3.5 MB/ComplexField/rank, so 8*BATCH * 3.5 MB per packed field.
+// BATCH=64 => ~1.75 GB per packed field. Safe on 40 GB A100.
 const int FFT_BATCH = 5;
 template<typename vtype> using iBatchComplex = iVector<iScalar<iScalar<vtype> >, 8*FFT_BATCH>;
-typedef iBatchComplex<Complex  >             BatchComplex;
-typedef iBatchComplex<vComplex >             vBatchComplex;
+typedef iBatchComplex<ComplexF  >            BatchComplex;
+typedef iBatchComplex<vComplexF >            vBatchComplex;
 typedef Lattice<vBatchComplex>               LatticeBatchComplex;
 
 #define A2A_GPU_KERNELS
@@ -270,20 +270,20 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
   std::vector<VecSpinMatrix> sliced;
 
   // meson field vector on device
-  static deviceVector<ComplexD> PI(Nmodes * Nmodes);
+  static deviceVector<ComplexF> PI(Nmodes * Nmodes);
 
   // placeholder until I sort out DTYPE for Masaaki's meson fields
   // DTYPE flat_meson_field;
 
-  // copy host to device and get memory address
+  // copy host to device and get memory address (and changing to single precision)
   //acceleratorCopyToDevice((void *)&flat_meson_field[0] ,(void *)&PI[0],Nmodes * Nmodes* sizeof(ComplexD));
 
   // works for single A2A vector stripped to NmodesxNmodes basis
-  acceleratorCopyToDevice(meson_field_ij.data() ,(void *)&PI[0],Nmodes * Nmodes* sizeof(ComplexD));
+  acceleratorCopyToDevice(meson_field_ij.data() ,(void *)&PI[0],Nmodes * Nmodes* sizeof(ComplexF));
 
 //const ComplexD *PI_ptr = &PI[0]; 
 
-  ComplexD *PI_ptr;
+  ComplexF *PI_ptr;
   acceleratorPut(PI_ptr, &PI[0]);
 
   for(int i=0; i<Nmodes; i++) {
@@ -296,7 +296,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
         autoView(w,wj[j],AcceleratorRead); // create vector of views
 
-        Complex Pi_val = PI_ptr[i * Nmodes + j];
+        //ComplexF Pi_val = PI_ptr[i * Nmodes + j];
 
         accelerator_for(ss,grid->oSites(),(size_t)Nsimd,{
             // contract y_i = PI_ij w_j
@@ -384,8 +384,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     GRID_ASSERT(Nmodes == Mesonfield.dimension(3));
 
     // need to write something to determine batch size based on available device memory
-    // ex single Meson field: 2700 * 2700 * 16 ~ 11MB
-    // Perlmutter A100 has 40GB memory => 300 matrices = ~ 32 GB with 8GB for system
+    // ex single Meson field: 2700 * 2700 * 8 ~ 5.5MB
+    // Perlmutter A100 has 40GB memory => 600 matrices = ~ 32 GB with 8GB for system
 
     const int max_batch_size = 100;
     const int contractions = A_vector_contractions.size();
@@ -402,8 +402,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // set up memory on device
     const int Ncomplex = Nmodes * Nmodes * contractions;
 
-    deviceVector<ComplexD> A(Ncomplex); // input vectors
-    deviceVector<ComplexD> C(Ncomplex); // result of matrix operations on device
+    deviceVector<ComplexF> A(Ncomplex); // input vectors
+    deviceVector<ComplexF> C(Ncomplex); // result of matrix operations on device
 
     // need to parse the input Eigen matrix appropriately
     // compute DC pieces at all tsrc
@@ -412,19 +412,19 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // use Mpp.data() to copy to device => Offset = i*(Nt*Nmodes*Nmodes) + j*(Nmodes*Nmodes) + k*(Nmodes) + l
 
     // need to only upload enough A fields to actually fill this out...
-    acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * contractions * sizeof(ComplexD));
+    acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * contractions * sizeof(ComplexF));
   
     // wrapping this bit in {} so that As, Bs and Cs get automatically deallocated when they are no longer needed.
     {
-    deviceVector<ComplexD* > As(contractions);
+    deviceVector<ComplexF* > As(contractions);
     // Same matrices as in As but in the order necessary for the contraction
-    deviceVector<ComplexD* > Bs(contractions);
-    deviceVector<ComplexD* > Cs(contractions);
+    deviceVector<ComplexF* > Bs(contractions);
+    deviceVector<ComplexF* > Cs(contractions);
 
     // vector of which matrices to contract
 
     for(int b=0; b<contractions; b++) {
-      ComplexD *ptr;
+      ComplexF *ptr;
       
       // this needs to be modified in the case that I want to use matrices more than once (which I do)
       // probably need another vector to organize these 
@@ -439,8 +439,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
       acceleratorPut(Cs[b], ptr);
     }
 
-    ComplexD alpha(1.0);
-    ComplexD beta(0.0);
+    ComplexF alpha(1.0);
+    ComplexF beta(0.0);
     RealD flops = 8.0 * Nmodes * Nmodes * Nmodes * contractions;
 
     RealD t0 = usecond();
@@ -465,7 +465,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "COPYING RESULTS TO HOST" << endl;
 
     //Eigen::Tensor<ComplexD,4, Eigen::RowMajor> c(momenta.size(),Nt,Nmodes,Nmodes);
-    acceleratorCopyFromDevice(&C[0], Result.data(), Nmodes * Nmodes * sizeof(ComplexD) * contractions);
+    acceleratorCopyFromDevice(&C[0], Result.data(), Nmodes * Nmodes * sizeof(ComplexF) * contractions);
     }
 };
 
@@ -502,8 +502,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     GRID_ASSERT(Nmodes == Mesonfield.dimension(2));
     
     // need to write something to determine batch size based on available device memory
-    // ex single Meson field: 2700 * 2700 * 16 ~ 11MB
-    // Perlmutter A100 has 40GB memory => 300 matrices = ~ 32 GB with 8GB for system
+    // ex single Meson field: 2700 * 2700 * 8 ~ 5.5MB
+    // Perlmutter A100 has 40GB memory => 600 matrices = ~ 32 GB with 8GB for system
       
     const int max_batch_size = 100;
     const int contractions = A_vector_contractions.size();
@@ -520,27 +520,27 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // set up memory on device
     const int Ncomplex = Nmodes * Nmodes * num_matrices;
                                                             
-    deviceVector<ComplexD> A(Ncomplex); // input vectors, holds all pion meson field matrices
+    deviceVector<ComplexF> A(Ncomplex); // input vectors, holds all pion meson field matrices
 
-    deviceVector<ComplexD> C(Nmodes * Nmodes * level_1_contractions); // result of first round of contractions on device
+    deviceVector<ComplexF> C(Nmodes * Nmodes * level_1_contractions); // result of first round of contractions on device
 
     // Input mesonfield Mpp(i, j, k, l)
     // use Mpp.data() to copy to device => Offset = i*(Nt*Nmodes*Nmodes) + j*(Nmodes*Nmodes) + k*(Nmodes) + l
     
     // need to only upload enough A fields to actually fill this out...
-    acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * num_matrices * sizeof(ComplexD));
+    acceleratorCopyToDevice(Mesonfield.data(), &A[0], Nmodes * Nmodes * num_matrices * sizeof(ComplexF));
    
     // wrapping this part in {} so that As1, Bs1 and Cs1 are automatically deallocaed when I finish with them
     { 
     // need different lengths in levels one and two
-    deviceVector<ComplexD* > As1(level_1_contractions);
+    deviceVector<ComplexF* > As1(level_1_contractions);
     // Same matrices as in As but in the order necessary for the contraction
-    deviceVector<ComplexD* > Bs1(level_1_contractions);
-    deviceVector<ComplexD* > Cs1(level_1_contractions);
+    deviceVector<ComplexF* > Bs1(level_1_contractions);
+    deviceVector<ComplexF* > Cs1(level_1_contractions);
 
  // vector of which matrices to contract
     for(int b=0; b<level_1_contractions; b++) {  
-      ComplexD *ptr;
+      ComplexF *ptr;
     
       // this needs to be modified in the case that I want to use matrices more than once (which I do)
       // probably need another vector to organize these
@@ -555,8 +555,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
       acceleratorPut(Cs1[b], ptr);
     }
                                               
-    ComplexD alpha(1.0);
-    ComplexD beta(0.0);
+    ComplexF alpha(1.0);
+    ComplexF beta(0.0);
     RealD flops = 8.0 * Nmodes * Nmodes * Nmodes * level_1_contractions;
     
     RealD t0 = usecond();
@@ -577,7 +577,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     cout << GridLogMessage << "=================================================== " << endl;
     cout << GridLogMessage << "=================================================== " << endl;
 
-    acceleratorCopyFromDevice(&C[0], Result_round_1.data(), Nmodes * Nmodes * sizeof(ComplexD) * (level_1_contractions) );
+    acceleratorCopyFromDevice(&C[0], Result_round_1.data(), Nmodes * Nmodes * sizeof(ComplexF) * (level_1_contractions) );
 
     // end variable scope
     }
@@ -590,16 +590,16 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     // wrap the below in {} so that the device deallocates memory when finished
     {
     // need different lengths in levels one and two
-    deviceVector<ComplexD* > As2(contractions - level_1_contractions); // again these are the source meson fields
-    deviceVector<ComplexD* > Cs2(contractions - level_1_contractions); // these are the results from the first round of matrices
+    deviceVector<ComplexF* > As2(contractions - level_1_contractions); // again these are the source meson fields
+    deviceVector<ComplexF* > Cs2(contractions - level_1_contractions); // these are the results from the first round of matrices
 
-    deviceVector<ComplexD> results(Nmodes * Nmodes * (contractions - level_1_contractions) ); // needed to hold results in second round
-    deviceVector<ComplexD* > level_2_result_s(contractions - level_1_contractions); // pntrs to results
+    deviceVector<ComplexF> results(Nmodes * Nmodes * (contractions - level_1_contractions) ); // needed to hold results in second round
+    deviceVector<ComplexF* > level_2_result_s(contractions - level_1_contractions); // pntrs to results
 
 
     // issue is that the below could be either from A or C...
     for(int b=0; b<contractions- level_1_contractions; b++) {
-      ComplexD *ptr;
+      ComplexF *ptr;
 
       // source meson fields
       if (buffer_flag_A[b] == 0) ptr = &A[A_vector_contractions[b+ level_1_contractions] * Nmodes * Nmodes]; // ex: Prod_Pi2 * Pi(k, tsrc)
@@ -621,8 +621,8 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
     }
 
     RealD t0 = usecond();
-    ComplexD alpha(1.0);
-    ComplexD beta(0.0);
+    ComplexF alpha(1.0);
+    ComplexF beta(0.0);
 
     // (check that the matrices are transposed correctly)
     blas.gemmBatched(Nmodes, Nmodes, Nmodes, alpha, As2, Cs2, beta, level_2_result_s);
@@ -644,7 +644,7 @@ void PipiA2Autils<FImpl>::ContractMesonFieldAndVector(FermionField *y_i1,
 
     //Eigen::Tensor<ComplexD,4, Eigen::RowMajor> c(momenta.size(),Nt,Nmodes,Nmodes);
     // need both products of round 1 and round 2
-    acceleratorCopyFromDevice(&results[0], Result_round_2.data(), Nmodes * Nmodes * sizeof(ComplexD) * (contractions - level_1_contractions) );
+    acceleratorCopyFromDevice(&results[0], Result_round_2.data(), Nmodes * Nmodes * sizeof(ComplexF) * (contractions - level_1_contractions) );
     }
 };
 
