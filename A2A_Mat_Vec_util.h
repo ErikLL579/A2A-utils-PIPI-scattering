@@ -765,9 +765,13 @@ void PipiA2Autils<FImpl>::FFT_type1_convolve(ComplexD &Result,
 
 
   for(int nu=0; nu<Nd; nu++) {
-    for(int mu=0; mu<Nd; mu++) {
-      tilde_phi_phtn_nu[nu] = tilde_phi_phtn_nu[nu] + tilde_phi1_mu[mu] *  phtn_prop_mu_nu[nu*Nd + mu];
-    }
+    //for(int mu=0; mu<Nd; mu++) {
+    //  tilde_phi_phtn_nu[nu] = tilde_phi_phtn_nu[nu] + tilde_phi1_mu[mu] *  phtn_prop_mu_nu[nu*Nd + mu];
+    //}
+    tilde_phi_phtn_nu[nu] = tilde_phi1_mu[0] *  phtn_prop_mu_nu[nu*Nd + 0]
+                          + tilde_phi1_mu[1] *  phtn_prop_mu_nu[nu*Nd + 1]
+                          + tilde_phi1_mu[2] *  phtn_prop_mu_nu[nu*Nd + 2]
+                          + tilde_phi1_mu[3] *  phtn_prop_mu_nu[nu*Nd + 3];
   }
 
   for(int nu=0; nu<Nd; nu++) {
@@ -1071,10 +1075,14 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve_claude_level2(ComplexD &Re
 
         // Photon propagator contraction: Kg_mu = sum_nu g~_nu * Delta~_{nu,mu}
         for(int mu=0; mu<Ngamma; mu++) {
-          Kg_mu[mu] = g_tilde_nu[0] * phtn_prop_mu_nu[0*Nd + mu];
-          for(int nu=1; nu<Ngamma; nu++) {
-            Kg_mu[mu] = Kg_mu[mu] + g_tilde_nu[nu] * phtn_prop_mu_nu[nu*Nd + mu];
-          }
+          //Kg_mu[mu] = g_tilde_nu[0] * phtn_prop_mu_nu[0*Nd + mu];
+          //for(int nu=1; nu<Ngamma; nu++) {
+          //  Kg_mu[mu] = Kg_mu[mu] + g_tilde_nu[nu] * phtn_prop_mu_nu[nu*Nd + mu];
+          //}
+          Kg_mu[mu] = g_tilde_nu[0] * phtn_prop_mu_nu[0*Nd + mu]
+                    + g_tilde_nu[1] * phtn_prop_mu_nu[1*Nd + mu]
+                    + g_tilde_nu[2] * phtn_prop_mu_nu[2*Nd + mu]
+                    + g_tilde_nu[3] * phtn_prop_mu_nu[3*Nd + mu];
         }
 
         // Unpack FFT of second bilinears
