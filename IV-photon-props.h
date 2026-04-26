@@ -11,46 +11,46 @@ class IVPhotonPropagator
    
   typedef typename FImpl::ComplexField ComplexField;
 
-  static void FeynmanGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta);
+  static void FeynmanGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, RealF min_momenta);
 
-  static void CoulombGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta);
+  static void CoulombGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, RealF min_momenta);
 
-  static void LandauGaugeMomentumSpace(  ComplexField *phtn_prop_mu_nu, RealD min_momenta){ GRID_ASSERT(0); };
+  static void LandauGaugeMomentumSpace(  ComplexField *phtn_prop_mu_nu, RealF min_momenta){ GRID_ASSERT(0); };
 
-  static void FeynmanGaugePositionSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta);
-  
-  static void CoulombGaugePositionSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta);
-  
-  static void LandauGaugePositionSpace(  ComplexField *phtn_prop_mu_nu, RealD min_momenta){ GRID_ASSERT(0); };
+  static void FeynmanGaugePositionSpace( ComplexField *phtn_prop_mu_nu, RealF min_momenta);
+
+  static void CoulombGaugePositionSpace( ComplexField *phtn_prop_mu_nu, RealF min_momenta);
+
+  static void LandauGaugePositionSpace(  ComplexField *phtn_prop_mu_nu, RealF min_momenta){ GRID_ASSERT(0); };
 
 };
 
   template <class FImpl>
-  void IVPhotonPropagator<FImpl>::FeynmanGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta)
+  void IVPhotonPropagator<FImpl>::FeynmanGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, RealF min_momenta)
   {
      GridBase *grid = phtn_prop_mu_nu[0].Grid();
      int Nd = grid->Dimensions();
-     Coordinate latt_size = grid->FullDimensions(); 
+     Coordinate latt_size = grid->FullDimensions();
 
-     LatticeRealD   coor(grid);
-     LatticeRealD  k_sqr(grid);
+     LatticeRealF   coor(grid);
+     LatticeRealF  k_sqr(grid);
      k_sqr = Zero();
-  
+
      // zero out phtn_prop
      for(int i=0; i<Nd*Nd ; i++) phtn_prop_mu_nu[i] = Zero();
 
      for(int mu=0; mu<Nd; mu++) {
-       RealD TwoPiL =  M_PI * 2.0/ latt_size[mu];
+       RealF TwoPiL =  M_PI * 2.0/ latt_size[mu];
        LatticeCoordinate(coor, mu);
        // (-pi, pi]
-       coor = where(coor > RealD(latt_size[mu]/2 - 1), coor - RealD(latt_size[mu]), coor);
-       k_sqr = k_sqr + coor * coor * (TwoPiL * TwoPiL);       
+       coor = where(coor > RealF(latt_size[mu]/2 - 1), coor - RealF(latt_size[mu]), coor);
+       k_sqr = k_sqr + coor * coor * (TwoPiL * TwoPiL);
      }
 
-     LatticeRealD prop(grid);
-     LatticeRealD one(grid);
-     prop = Zero();                                                                                                                                                                                                                      
-     one = RealD(1.0); 
+     LatticeRealF prop(grid);
+     LatticeRealF one(grid);
+     prop = Zero();
+     one = RealF(1.0); 
 
      prop = where(k_sqr < min_momenta, prop , one / k_sqr);
 
@@ -67,7 +67,7 @@ class IVPhotonPropagator
 
 
   template <class FImpl>
-  void IVPhotonPropagator<FImpl>::FeynmanGaugePositionSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta)
+  void IVPhotonPropagator<FImpl>::FeynmanGaugePositionSpace( ComplexField *phtn_prop_mu_nu, RealF min_momenta)
   {
    GridBase *grid = phtn_prop_mu_nu[0].Grid(); 
    int Nd = grid->Dimensions();
@@ -84,16 +84,16 @@ class IVPhotonPropagator
 
 
   template <class FImpl>
-  void IVPhotonPropagator<FImpl>::CoulombGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta)
+  void IVPhotonPropagator<FImpl>::CoulombGaugeMomentumSpace( ComplexField *phtn_prop_mu_nu, RealF min_momenta)
   {
      GridBase *grid = phtn_prop_mu_nu[0].Grid();
      int Nd = grid->Dimensions();
      Coordinate latt_size = grid->FullDimensions();
 
-     LatticeRealD         coor(grid);
-     LatticeRealD         coor2(grid);
-     LatticeRealD        k_sqr(grid);
-     LatticeRealD  space_k_sqr(grid);
+     LatticeRealF         coor(grid);
+     LatticeRealF         coor2(grid);
+     LatticeRealF        k_sqr(grid);
+     LatticeRealF  space_k_sqr(grid);
 
      k_sqr = Zero();
      space_k_sqr = Zero();
@@ -103,25 +103,25 @@ class IVPhotonPropagator
 
      // spacial momentum
      for(int mu=0; mu<Nd-1; mu++) {
-       RealD TwoPiL =  M_PI * 2.0/ latt_size[mu];
+       RealF TwoPiL =  M_PI * 2.0/ latt_size[mu];
        LatticeCoordinate(coor, mu);
        // (-pi, pi]
-       coor = where(coor > RealD(latt_size[mu]/2 - 1), coor - RealD(latt_size[mu]), coor);
+       coor = where(coor > RealF(latt_size[mu]/2 - 1), coor - RealF(latt_size[mu]), coor);
        space_k_sqr = space_k_sqr + coor * coor * (TwoPiL * TwoPiL);
      }
 
      // four momentum
-     RealD TwoPiL =  M_PI * 2.0/ latt_size[Nd-1];
+     RealF TwoPiL =  M_PI * 2.0/ latt_size[Nd-1];
      LatticeCoordinate(coor, Nd-1);
-     coor = where(coor > RealD(latt_size[Nd-1]/2 - 1), coor - RealD(latt_size[Nd-1]), coor);
+     coor = where(coor > RealF(latt_size[Nd-1]/2 - 1), coor - RealF(latt_size[Nd-1]), coor);
      k_sqr = space_k_sqr + coor * coor * (TwoPiL * TwoPiL);
 
-     LatticeRealD prop(grid);
-     LatticeRealD one(grid);
-     LatticeRealD zero(grid);
+     LatticeRealF prop(grid);
+     LatticeRealF one(grid);
+     LatticeRealF zero(grid);
      zero = Zero();
      prop = Zero();
-     one = RealD(1.0);
+     one = RealF(1.0);
 
      prop = where(space_k_sqr < min_momenta, prop , one / space_k_sqr);
 
@@ -135,14 +135,14 @@ class IVPhotonPropagator
      // D_{ij} = (d_{ij} - pi pj / |\vec{p}^2| ) / p^2
      for(int mu=0; mu<Nd-1; mu++) {
        for(int nu=0; nu<Nd-1; nu++) {
-         RealD TwoPiL_mu =  M_PI * 2.0/ latt_size[mu];
-         RealD TwoPiL_nu =  M_PI * 2.0/ latt_size[nu];
-         // pi  
+         RealF TwoPiL_mu =  M_PI * 2.0/ latt_size[mu];
+         RealF TwoPiL_nu =  M_PI * 2.0/ latt_size[nu];
+         // pi
          LatticeCoordinate(coor, mu);
          // pj
          LatticeCoordinate(coor2, nu);
-         coor = where(coor > RealD(latt_size[mu]/2 - 1), coor - RealD(latt_size[mu]), coor);
-         coor2 = where(coor2 > RealD(latt_size[nu]/2 - 1), coor2 - RealD(latt_size[nu]), coor2);
+         coor = where(coor > RealF(latt_size[mu]/2 - 1), coor - RealF(latt_size[mu]), coor);
+         coor2 = where(coor2 > RealF(latt_size[nu]/2 - 1), coor2 - RealF(latt_size[nu]), coor2);
  
          // - pi pj / |vec{p}^2|
          prop = - coor * coor2 * TwoPiL_mu *TwoPiL_nu / space_k_sqr;
@@ -166,7 +166,7 @@ class IVPhotonPropagator
 
 
   template <class FImpl>
-  void IVPhotonPropagator<FImpl>::CoulombGaugePositionSpace( ComplexField *phtn_prop_mu_nu, RealD min_momenta)
+  void IVPhotonPropagator<FImpl>::CoulombGaugePositionSpace( ComplexField *phtn_prop_mu_nu, RealF min_momenta)
   {
    GridBase *grid = phtn_prop_mu_nu[0].Grid();
    int Nd = grid->Dimensions();
