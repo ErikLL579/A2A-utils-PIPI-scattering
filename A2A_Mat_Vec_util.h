@@ -1026,6 +1026,10 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve_claude_level2(ComplexD &Re
 
   FFT theFFT(dynamic_cast<GridCartesian *>(grid));
 
+  ComplexField g_nu(grid);
+  ComplexField h_mu(grid);
+  FermionField tmp(grid);
+
   for(int i2=0; i2<Nmodes; i2++){
 
     // precompute gamma * v_{i2} for all nu (hoisted out of i3 loop)
@@ -1047,7 +1051,7 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve_claude_level2(ComplexD &Re
         // First bilinear: g_nu = <w_{i3} | gamma_nu | v_{i2}>
         // goes into components [4*b .. 4*b+3]
         for(int nu=0; nu<Ngamma; nu++) {
-          ComplexField g_nu(grid);
+          //ComplexField g_nu(grid);
           g_nu = localInnerProduct(wi[i3], v_g_nu[nu]);
           PokeIndex<0>(packed, g_nu, 4*b + nu);
         }
@@ -1055,8 +1059,9 @@ void PipiA2Autils<FImpl>::FFT_type2_contract_convolve_claude_level2(ComplexD &Re
         // Second bilinear: h_mu = <A_{i2} | gamma_mu | B_{i3}>
         // goes into components [4*BATCH + 4*b .. 4*BATCH + 4*b+3]
         for(int mu=0; mu<Ngamma; mu++) {
-          FermionField tmp = Gamma(gammas[mu]) * Bi[i3];
-          ComplexField h_mu(grid);
+          //FermionField tmp = Gamma(gammas[mu]) * Bi[i3];
+          //ComplexField h_mu(grid);
+          tmp = Gamma(gammas[mu]) * Bi[i3];
           h_mu = localInnerProduct(Ai[i2], tmp);
           PokeIndex<0>(packed, h_mu, 4*BATCH + 4*b + mu);
         }
