@@ -127,29 +127,40 @@ For the EM input:
 
 - 24 `prod_Pi` products (Phase 1, unchanged from parent).
 - 1 `prod_vec1_mu = <w| . gamma_mu |v>` (used in **every** term, 80 occurrences).
-- 42 chained `prod_vec` products across 4 further levels with mat-vec dressing
-  in L2/L3 and bra-side closure in L4/L5:
+- 62 chained `prod_vec` products across 6 further levels:
   - L2 (14): `Pi.<w|`, `gamma|v>.Pi`, `gamma|v>.prod_Pi` (Phase 1 L1)
   - L3 (10): `gamma|v>.prod_Pi` (Phase 1 L2)
   - L4 (10): closure — `<w|.prod_vec_X`, `prod_vec_X.gamma|v>` (closing L2)
   - L5 (8):  closure — `<w|.prod_vec_X` (closing L3)
+  - L6 (18): canonical-pair closures (the new pass — see below)
+  - L7 (2):  canonical-pair closures (iteration 2)
   Includes bra-side dressed products (`Pi . <w|`) which the parent optimizer
   forbids via its orphan-bra rule — needed here because absorbed-vertex chains
   in connected types (Type5/9) have Pi matrices on both sides of the split
   bra/ket.
 - 80 terms → 40 unique definitions + 40 redirects via position-swap dedup.
+- **Every** term has a 2-element main trace `Tr[prod_vec1_X(pos1).prod_vecK_Y(pos2)]`
+  (plus optional `Tr[prod_PiN]` factors for disconnected diagrams). The
+  previously-suboptimal Type5_2 and Type9_1 (4-element traces) are now
+  cleanly 2-element via L7 closures.
 
-Two terms remain with 4-element chained traces rather than the cleaner
-2-element form the parent achieves:
-- `Type5_2 = Tr[prod_vec1_mu(x_1) . prod_Pi11 . <w|(x_2) . prod_vec5_nu(x_2)]`
-- `Type9_1 = Tr[prod_vec1_nu(x_2) . prod_Pi13 . <w|(x_1) . prod_vec6_mu(x_1)]`
-Both are mathematically equivalent (verified by cyclic rotation against the
-input). Phase 2 doesn't compact them further because the underlying
-`gamma_X|v>(pos).prod_PiN` and `prod_PiN.<w|(pos)` pairs occur only once at
-their resolved positions, falling below the count≥2 threshold for product
-creation.
+### Canonical-pair closure pass (`_close_canonical_pairs`)
 
-Five representative terms (Type1_0, Type5_2, Type6_0, Type9_1, Type10_0,
+Why needed: Phase 2's pair counting uses position-attached names, so
+`prod_vec4(x_1) . prod_vec7_mu(x_1)` and `prod_vec4(x_2) . prod_vec7_nu(x_2)`
+are two different keys with count 1 each. They fall below the count≥2
+threshold so the closure isn't created — even though they are *canonically*
+the same pair (equivalent under x_1↔x_2/μ↔ν).
+
+The canonical-pair pass runs after `_absorb_bare_matrices`. It re-collects
+pairs using canonical pair keys (positions and gamma labels stripped) and
+substitutes per-position instances of any canonical pair occurring ≥2
+times. Iterates until no canonical pair has count ≥2. The unsplit standalone
+`<w|γ_X|v>(pos)` is excluded (still in trace form at this point), and raw
+`<w|(pos).γ|v>(pos)` pairs are skipped so `_create_current_vertex_product`
+can still factor them into the universal vertex.
+
+Six representative terms (Type1_0, Type5_2, Type6_0, Type9_1, Type10_0,
 Type11_0) hand-expanded and verified against the original
 `I2_pipi_EM_cexpr_mom.txt` up to cyclic permutation of traces.
 
@@ -177,3 +188,8 @@ Type11_0) hand-expanded and verified against the original
   Six representative terms (Type1_0, Type5_2, Type6_0, Type9_1, Type10_0,
   Type11_0) hand-checked against original `_mom.txt`. Two terms (Type5_2,
   Type9_1) retain 4-element traces but are mathematically correct.
+- 2026-05-04: Added `_close_canonical_pairs` pass to absorb same-position
+  pairs whose canonical (position/gamma-stripped) signature occurs ≥2 times
+  even when full-name counts are 1 each. Now every term has the optimal
+  2-element main trace form, including the previously suboptimal Type5_2
+  and Type9_1. Total: 62 chained prod_vec across 6 further levels.
