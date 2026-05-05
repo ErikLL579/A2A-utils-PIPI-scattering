@@ -528,71 +528,113 @@ def optimize_phase1(terms):
     return terms, product_defs, product_positions, product_shapes
 
 
-def optimize_phase2(terms, product_positions: Dict[str, Optional[str]],
+def optimize_phase2(terms,
+                    product_positions: Dict[str, Optional[str]],
                     product_shapes: Dict[str, str]):
-    """
-    Phase 2: Vector-matrix products with position locality enforcement.
-    Never combines elements at different spatial positions.
-    Products carry their position in their name: prod_vecN(x_1).
+    """Phase 2: Vector-matrix products with position locality and canonical
+    (position/gamma stripped) pair counting.
 
-    Returns (terms, product_defs, product_gammas)
+    The same product structure appearing at x_1 and at x_2 is recognized
+    as one canonical pair (their counts add), so simple matrix-vector
+    dressings like `prod_Pi_K . <w|` get absorbed at their natural
+    dependency level instead of being deferred to a late closure pass.
+
+    Definitions are stored canonically (no position/gamma); each instance
+    in a term is a positionful/gamma-attached reference. The shape rule
+    skips pairs whose contraction would cost Nm^3 * Ns at every site.
+
+    Returns (terms, product_defs, product_gammas).
     """
     product_defs = []
-    product_gammas = {}
+    product_gammas: Dict[str, Optional[str]] = {}
     counter = 0
     level = 0
 
     while True:
-        pair_counts = collect_pairs(terms, matrix_only=False,
-                                    product_positions=product_positions)
-        repeated = {k: v for k, v in pair_counts.items() if v >= 2}
+        canon_groups: Dict[str, list] = OrderedDict()
+        canon_counts: Dict[str, int] = {}
+        canon_shapes: Dict[str, str] = {}
+        canon_has_gamma: Dict[str, bool] = {}
+
+        for name, coef, traces in terms:
+            if not isinstance(traces, list):
+                continue
+            for trace_str, elements in traces:
+                for i in range(len(elements) - 1):
+                    a, b = elements[i], elements[i + 1]
+                    if is_unsplit_vertex(a) or is_unsplit_vertex(b):
+                        continue
+                    if is_vector_vector_pair(a, b):
+                        continue
+                    pos_a = get_element_position(a, product_positions)
+                    pos_b = get_element_position(b, product_positions)
+                    if not positions_compatible(pos_a, pos_b):
+                        continue
+
+                    shape_a = _get_element_shape(a, product_shapes)
+                    shape_b = _get_element_shape(b, product_shapes)
+                    result_shape = _pair_result_shape(shape_a, shape_b)
+                    if result_shape is None:
+                        continue
+
+                    pos = combined_position(pos_a, pos_b)
+                    gamma_a = (get_element_gamma(a, product_gammas)
+                               or _gamma_from_name(a))
+                    gamma_b = (get_element_gamma(b, product_gammas)
+                               or _gamma_from_name(b))
+                    gamma = combined_gamma(gamma_a, gamma_b)
+
+                    canon_a = _canonical_element_key(a)
+                    canon_b = _canonical_element_key(b)
+                    canon_key = f"{canon_a} . {canon_b}"
+                    full_key = make_pair_key(a, b)
+
+                    canon_groups.setdefault(canon_key, []).append(
+                        (full_key, pos, gamma))
+                    canon_counts[canon_key] = canon_counts.get(canon_key, 0) + 1
+                    canon_shapes[canon_key] = result_shape
+                    if gamma is not None:
+                        canon_has_gamma[canon_key] = True
+
+        repeated = {k: v for k, v in canon_counts.items() if v >= 2}
         if not repeated:
             break
 
         level += 1
         product_names = OrderedDict()
-        skipped_keys = []
-        for pair_key in sorted(repeated.keys()):
-            # Determine position of this product
-            a, b = pair_key.split(' . ', 1)
-            a, b = a.strip(), b.strip()
-            pos_a = get_element_position(a, product_positions)
-            pos_b = get_element_position(b, product_positions)
-            position = combined_position(pos_a, pos_b)
+        product_map: Dict[str, str] = {}
+        new_counts: Dict[str, int] = {}
 
-            # Shape rule: forbid contractions that would cost Nm^3 * Ns.
-            shape_a = _get_element_shape(a, product_shapes)
-            shape_b = _get_element_shape(b, product_shapes)
-            result_shape = _pair_result_shape(shape_a, shape_b)
-            if result_shape is None:
-                skipped_keys.append(pair_key)
-                continue
-
+        for canon_key in sorted(repeated.keys()):
             counter += 1
-            # Determine gamma label of this product
-            gamma_a = get_element_gamma(a, product_gammas)
-            gamma_b = get_element_gamma(b, product_gammas)
-            gamma = combined_gamma(gamma_a, gamma_b)
-            gamma_suffix = f"_{gamma}" if gamma else ""
+            members = canon_groups[canon_key]
+            has_gamma = canon_has_gamma.get(canon_key, False)
+            canonical_name = f"prod_vec{counter}" + ("_mu" if has_gamma else "")
+            base_name = f"prod_vec{counter}"
 
-            # Include gamma label and position in the product name
-            if position:
-                prod_name = f"prod_vec{counter}{gamma_suffix}({position})"
-            else:
-                prod_name = f"prod_vec{counter}{gamma_suffix}"
+            display_key = (canon_key.replace('gamma |v>', 'gamma_mu |v>')
+                           if has_gamma else canon_key)
+            product_names[display_key] = canonical_name
+            new_counts[display_key] = repeated[canon_key]
 
-            product_names[pair_key] = prod_name
-            product_positions[prod_name] = position
-            product_gammas[prod_name] = gamma
-            product_shapes[prod_name] = result_shape
+            shape = canon_shapes[canon_key]
+            product_shapes[canonical_name] = shape
 
-        if not product_names:
-            # All candidates blocked by shape rule — nothing more to do here.
-            break
+            seen_full = set()
+            for full_key, pos, gamma in members:
+                if full_key in seen_full:
+                    continue
+                seen_full.add(full_key)
+                gamma_suffix = f"_{gamma}" if gamma else ""
+                pos_suffix = f"({pos})" if pos else ""
+                sub_name = f"{base_name}{gamma_suffix}{pos_suffix}"
+                product_map[full_key] = sub_name
+                product_positions[sub_name] = pos
+                product_gammas[sub_name] = gamma
+                product_shapes[sub_name] = shape
 
-        terms = apply_substitution_to_terms(terms, product_names)
-        product_defs.append((level, product_names,
-                             {k: pair_counts[k] for k in product_names}))
+        terms = apply_substitution_to_terms(terms, product_map)
+        product_defs.append((level, product_names, new_counts))
 
     return terms, product_defs, product_gammas
 
@@ -1485,23 +1527,17 @@ def optimize(terms, iterate: bool = False):
                    (standalone) so the C++/CUDA stage can FFT it once
                    globally; split the other for absorption.
       Phase 1:     matrix-matrix prod_Pi chains (cheap, position-free).
-      Phase 2:     vector-matrix prod_vec chains, position-local. This
-                   variant ALLOWS mat . <w|(pos) pairs (parent forbids
-                   them) so bra-side dressing of the absorbed chain works.
-      Dedup:       merge Phase 2 products differing only by position/gamma.
-      Bare-mat:    absorb leftover bare Pi/prod_Pi adjacent to gamma|v>.
-      Canonical:   absorb same-position pairs whose canonical (position/
-                   gamma-stripped) signature occurs >=2 times across terms,
-                   catching closures that Phase 2 missed because the full
-                   position-attached pair occurred only once at each of x_1
-                   and x_2.
-      Vertex:      replace every standalone unsplit vertex (and any
-                   leftover adjacent <w|.gamma|v> split pairs) with a
-                   reference to a single canonical product.
+      Phase 2:     vector-matrix prod_vec chains, position-local. Uses
+                   canonical (position/gamma-stripped) pair counting so
+                   simple matrix-vector dressings (e.g. prod_Pi.<w|) are
+                   absorbed at their natural dependency level rather than
+                   deferred to a late closure pass. Shape rule forbids
+                   matrix-at-site operands from being matrix-multiplied
+                   with anything (only allowed: vector_bra x vector_ket
+                   closure into matrix_at_site).
+      Vertex:      replace every standalone unsplit vertex with a
+                   reference to the canonical <w|.gamma_mu|v> product.
       Renumber:    promote the universal vertex product to prod_vec1_mu.
-      Reorder:     swap Phase 2 Levels 3 and 4 so all bra-side closure
-                   steps (<w|.prod_vec_X, prod_vec_X.gamma|v>) sit in the
-                   final two levels and mat-vec dressing comes first.
       Pos-swap:    dedup terms equivalent under x_1 <-> x_2 / mu <-> nu.
 
     Returns (terms, phase1_defs, phase2_defs).
@@ -1510,18 +1546,8 @@ def optimize(terms, iterate: bool = False):
     terms, phase1_defs, product_positions, product_shapes = optimize_phase1(terms)
     terms, phase2_defs, product_gammas = optimize_phase2(
         terms, product_positions, product_shapes)
-    phase2_defs, terms = deduplicate_phase2(phase2_defs, terms,
-                                            product_positions, product_gammas,
-                                            product_shapes)
-    phase2_defs, terms = _absorb_bare_matrices(phase2_defs, terms,
-                                               product_positions, product_gammas,
-                                               product_shapes)
-    phase2_defs, terms = _close_canonical_pairs(phase2_defs, terms,
-                                                product_positions, product_gammas,
-                                                product_shapes)
     phase2_defs, terms = _create_current_vertex_product(phase2_defs, terms)
     phase2_defs, terms = _renumber_with_universal_first(phase2_defs, terms)
-    phase2_defs, terms = _swap_phase2_levels(phase2_defs, terms, 2, 3)
     terms = _dedup_position_swap(terms)
     return terms, phase1_defs, phase2_defs
 
