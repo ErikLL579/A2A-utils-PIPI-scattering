@@ -498,10 +498,11 @@ def optimize_phase1(terms):
     Phase 1: Matrix-matrix products only (Pi chains).
     No position tracking needed since Pi fields are position-free.
 
-    Returns (terms, product_defs, product_positions)
+    Returns (terms, product_defs, product_positions, product_shapes)
     """
     product_defs = []
     product_positions = {}  # all Phase 1 products are position-free
+    product_shapes = {}     # all Phase 1 products are matrix_pos_free
     counter = 0
     level = 0
 
@@ -518,21 +519,23 @@ def optimize_phase1(terms):
             prod_name = f"prod_Pi{counter}"
             product_names[pair_key] = prod_name
             product_positions[prod_name] = None  # position-free
+            product_shapes[prod_name] = 'matrix_pos_free'
 
         terms = apply_substitution_to_terms(terms, product_names)
         product_defs.append((level, product_names,
                              {k: pair_counts[k] for k in product_names}))
 
-    return terms, product_defs, product_positions
+    return terms, product_defs, product_positions, product_shapes
 
 
-def optimize_phase2(terms, product_positions: Dict[str, Optional[str]]):
+def optimize_phase2(terms, product_positions: Dict[str, Optional[str]],
+                    product_shapes: Dict[str, str]):
     """
     Phase 2: Vector-matrix products with position locality enforcement.
     Never combines elements at different spatial positions.
     Products carry their position in their name: prod_vecN(x_1).
 
-    Returns (terms, product_defs)
+    Returns (terms, product_defs, product_gammas)
     """
     product_defs = []
     product_gammas = {}
@@ -548,14 +551,24 @@ def optimize_phase2(terms, product_positions: Dict[str, Optional[str]]):
 
         level += 1
         product_names = OrderedDict()
+        skipped_keys = []
         for pair_key in sorted(repeated.keys()):
-            counter += 1
             # Determine position of this product
             a, b = pair_key.split(' . ', 1)
+            a, b = a.strip(), b.strip()
             pos_a = get_element_position(a, product_positions)
             pos_b = get_element_position(b, product_positions)
             position = combined_position(pos_a, pos_b)
 
+            # Shape rule: forbid contractions that would cost Nm^3 * Ns.
+            shape_a = _get_element_shape(a, product_shapes)
+            shape_b = _get_element_shape(b, product_shapes)
+            result_shape = _pair_result_shape(shape_a, shape_b)
+            if result_shape is None:
+                skipped_keys.append(pair_key)
+                continue
+
+            counter += 1
             # Determine gamma label of this product
             gamma_a = get_element_gamma(a, product_gammas)
             gamma_b = get_element_gamma(b, product_gammas)
@@ -571,6 +584,11 @@ def optimize_phase2(terms, product_positions: Dict[str, Optional[str]]):
             product_names[pair_key] = prod_name
             product_positions[prod_name] = position
             product_gammas[prod_name] = gamma
+            product_shapes[prod_name] = result_shape
+
+        if not product_names:
+            # All candidates blocked by shape rule — nothing more to do here.
+            break
 
         terms = apply_substitution_to_terms(terms, product_names)
         product_defs.append((level, product_names,
@@ -631,7 +649,8 @@ def _rewrite_term_element(elem: str,
 
 def deduplicate_phase2(phase2_defs, terms,
                        product_positions: Dict[str, Optional[str]],
-                       product_gammas: Dict[str, Optional[str]]):
+                       product_gammas: Dict[str, Optional[str]],
+                       product_shapes: Dict[str, str]):
     """Merge Phase 2 products that differ only by position (x_1/x_2)
     and gamma label (mu/nu).
 
@@ -677,12 +696,19 @@ def deduplicate_phase2(phase2_defs, terms,
             new_product_names[display_key] = canonical_name
             new_pair_counts[display_key] = total_count
 
+            # Carry shape across the rename. All members of a canonical
+            # group have the same shape, so taking any member's shape works.
+            shape = None
             for _, old_name in members:
                 old_to_canonical[old_name] = canonical_name
+                if shape is None:
+                    shape = product_shapes.get(old_name)
+            if shape is not None:
+                product_shapes[canonical_name] = shape
 
         new_phase2_defs.append((level, new_product_names, new_pair_counts))
 
-    # Rewrite terms
+    # Rewrite terms and propagate shapes to the new positionful instance names.
     new_terms = []
     for name, coef, traces in terms:
         new_traces = []
@@ -692,6 +718,22 @@ def deduplicate_phase2(phase2_defs, terms,
             new_traces.append((trace_str, new_elements))
         new_terms.append((name, coef, new_traces))
 
+    # Populate product_shapes with the new positionful instance names so
+    # downstream lookups by full name succeed.
+    for old_name, canonical_base in old_to_canonical.items():
+        if canonical_base not in product_shapes:
+            continue
+        pos, gamma = old_name_info[old_name]
+        base_name = re.sub(r'_mu$', '', canonical_base)
+        gamma_suffix = f"_{gamma}" if gamma else ""
+        pos_suffix = f"({pos})" if pos else ""
+        new_full = f"{base_name}{gamma_suffix}{pos_suffix}"
+        product_shapes[new_full] = product_shapes[canonical_base]
+        # Also record under the new full positionful name in product_positions
+        # so future _get_element_shape calls don't have to strip.
+        product_positions[new_full] = pos
+        product_gammas[new_full] = gamma
+
     return new_phase2_defs, new_terms
 
 
@@ -700,7 +742,8 @@ def _is_bare_matrix(elem: str) -> bool:
     return elem.startswith("Pi(") or re.match(r'prod_Pi\d+$', elem) is not None
 
 
-def _absorb_bare_matrices(phase2_defs, terms, product_positions, product_gammas):
+def _absorb_bare_matrices(phase2_defs, terms, product_positions, product_gammas,
+                          product_shapes):
     """Absorb bare matrices adjacent to gamma |v> in connected traces.
 
     For each gamma_X |v>(pos) . bare_matrix pair:
@@ -763,12 +806,15 @@ def _absorb_bare_matrices(phase2_defs, terms, product_positions, product_gammas)
         new_L1_names[canon_key] = canonical_name
         new_L1_counts[canon_key] = total_count
 
+        # Step 1 always produces a vector_ket: gamma|v>(x) . matrix_pos_free.
+        product_shapes[canonical_name] = 'vector_ket'
         for pk in member_keys:
             pos, gamma = pair_info[pk]
             sub_name = f"{base_name}_{gamma}({pos})"
             product_map[pk] = sub_name
             product_positions[sub_name] = pos
             product_gammas[sub_name] = gamma
+            product_shapes[sub_name] = 'vector_ket'
             l1_full_to_canonical[sub_name] = canonical_name
 
     terms = apply_substitution_to_terms(terms, product_map)
@@ -823,12 +869,15 @@ def _absorb_bare_matrices(phase2_defs, terms, product_positions, product_gammas)
         new_L2_names[canon_key] = canonical_name
         new_L2_counts[canon_key] = total_count
 
+        # Step 2 closes <w|(x) onto a vector_ket(x) -> matrix_at_site.
+        product_shapes[canonical_name] = 'matrix_at_site'
         for pk in member_keys:
             pos, gamma = pair_info2[pk]
             sub_name = f"{base_name}_{gamma}({pos})"
             product_map2[pk] = sub_name
             product_positions[sub_name] = pos
             product_gammas[sub_name] = gamma
+            product_shapes[sub_name] = 'matrix_at_site'
 
     terms = apply_substitution_to_terms(terms, product_map2)
 
@@ -1173,9 +1222,93 @@ def _canonical_element_key(elem: str) -> str:
     return elem
 
 
+# =============================================================================
+# Shape tracking
+# =============================================================================
+#
+# Every operand carries a "shape" describing its A2A index structure and
+# spatial dependence. The four kinds:
+#
+#   matrix_pos_free  Both A2A indices outstanding, no spatial dependence
+#                    (Pi(...), prod_PiN). Shape [Nm, Nm]. Cheap (~Nm^3 once).
+#   vector_bra       Bra-side A2A index outstanding, ket index summed,
+#                    position-locked. Shape [Nm, Ns]. Cost Nm^2 * Ns.
+#   vector_ket       Ket-side A2A index outstanding, bra index summed,
+#                    position-locked. Shape [Nm, Ns]. Cost Nm^2 * Ns.
+#   matrix_at_site   Both A2A indices outstanding AND position-locked
+#                    (closure of bra and ket). Shape [Nm, Nm, Ns].
+#                    Constructible in Nm^2 * Ns; CANNOT be matrix-multiplied
+#                    with another matrix at every spatial site (that would
+#                    cost Nm^3 * Ns ~ 10^16 at production scale Nm=2700).
+#
+# The forbidden contraction is: anything * matrix_at_site or matrix_at_site
+# * anything when the other operand is also a matrix (pos-free or at-site).
+# The only allowed pairings involving matrix_at_site are (a) keeping it
+# standalone in a top-level trace, and (b) closing two vectors at the same
+# site into a fresh matrix_at_site. The shape rule below encodes this.
+
+def _get_element_shape(elem: str,
+                       product_shapes: Dict[str, str]) -> Optional[str]:
+    """Return the shape kind of an element, or None if it cannot be
+    determined.
+
+    Looks up product references in product_shapes by full positionful name
+    first, then by the position-stripped form. Falls back to regex for raw
+    bra/ket/Pi/prod_Pi elements.
+    """
+    if elem in product_shapes:
+        return product_shapes[elem]
+    stripped = re.sub(r'\(x_\d+\)$', '', elem)
+    if stripped != elem and stripped in product_shapes:
+        return product_shapes[stripped]
+    if is_unsplit_vertex(elem):
+        return 'matrix_at_site'
+    if re.match(r'<w\|\(x_\d+\)$', elem):
+        return 'vector_bra'
+    if re.match(r'gamma_\w+\s+\|v>\(x_\d+\)$', elem):
+        return 'vector_ket'
+    if elem.startswith('Pi('):
+        return 'matrix_pos_free'
+    if re.match(r'prod_Pi\d+$', elem):
+        return 'matrix_pos_free'
+    return None
+
+
+def _pair_result_shape(shape_a: Optional[str],
+                       shape_b: Optional[str]) -> Optional[str]:
+    """Return the shape resulting from contracting (a . b), or None if the
+    contraction would require an O(Nm^3 * Ns) per-site matrix-matrix
+    multiplication (forbidden).
+
+    Allowed contractions:
+      vector_bra      . vector_ket      -> matrix_at_site  (closure)
+      matrix_pos_free . vector_bra      -> vector_bra
+      vector_bra      . matrix_pos_free -> vector_bra
+      matrix_pos_free . vector_ket      -> vector_ket
+      vector_ket      . matrix_pos_free -> vector_ket
+      matrix_pos_free . matrix_pos_free -> matrix_pos_free  (Phase 1)
+
+    Anything involving matrix_at_site as an operand is forbidden.
+    """
+    if shape_a is None or shape_b is None:
+        return None
+    if shape_a == 'matrix_at_site' or shape_b == 'matrix_at_site':
+        return None
+    if shape_a == 'vector_bra' and shape_b == 'vector_ket':
+        return 'matrix_at_site'
+    if shape_a == 'matrix_pos_free' and shape_b == 'matrix_pos_free':
+        return 'matrix_pos_free'
+    if shape_a == 'matrix_pos_free' and shape_b in ('vector_bra', 'vector_ket'):
+        return shape_b
+    if shape_b == 'matrix_pos_free' and shape_a in ('vector_bra', 'vector_ket'):
+        return shape_a
+    return None
+
+
 def _close_canonical_pairs(phase2_defs, terms,
                            product_positions: Dict[str, Optional[str]],
-                           product_gammas: Dict[str, Optional[str]]):
+                           product_gammas: Dict[str, Optional[str]],
+                           product_shapes: Dict[str, str]):
     """Absorb adjacent same-position pairs into closure products using
     canonical (position/gamma stripped) pair counting.
 
@@ -1187,11 +1320,13 @@ def _close_canonical_pairs(phase2_defs, terms,
     Examples that get absorbed:
         prod_vec4(x_2) . prod_vec7_nu(x_2)   (closure of two L2 prod_vecs)
         <w|(x_2) . prod_vec5_nu(x_2)         (raw bra closing onto prod_vec)
-        prod_Pi11 . prod_vec_X_nu(x_2)       (prod_Pi attaching to chain)
+        prod_Pi11 . <w|(x_2)                 (prod_Pi attaching to bra)
 
     Excludes:
         - pairs involving the unsplit standalone vertex <w|gamma_X|v>(pos)
         - vector-vector raw pairs (the universal vertex, handled later)
+        - pairs that violate the shape rule (would require Nm^3 * Ns at
+          every spatial site — e.g., prod_Pi . matrix_at_site).
     """
     max_num = 0
     for _, product_names, _ in phase2_defs:
@@ -1206,6 +1341,7 @@ def _close_canonical_pairs(phase2_defs, terms,
     while True:
         canon_groups: Dict[str, list] = OrderedDict()
         canon_counts: Dict[str, int] = {}
+        canon_shapes: Dict[str, str] = {}
 
         for name, coef, traces in terms:
             if not isinstance(traces, list):
@@ -1221,6 +1357,15 @@ def _close_canonical_pairs(phase2_defs, terms,
                     pos_b = get_element_position(b, product_positions)
                     if not positions_compatible(pos_a, pos_b):
                         continue
+
+                    # Shape rule: forbid pairs that would cost Nm^3 * Ns
+                    # (anything contracting against a matrix_at_site).
+                    shape_a = _get_element_shape(a, product_shapes)
+                    shape_b = _get_element_shape(b, product_shapes)
+                    result_shape = _pair_result_shape(shape_a, shape_b)
+                    if result_shape is None:
+                        continue
+
                     pos = combined_position(pos_a, pos_b)
                     gamma_a = (get_element_gamma(a, product_gammas)
                                or _gamma_from_name(a))
@@ -1236,6 +1381,7 @@ def _close_canonical_pairs(phase2_defs, terms,
                     canon_groups.setdefault(canon_key, []).append(
                         (full_key, pos, gamma))
                     canon_counts[canon_key] = canon_counts.get(canon_key, 0) + 1
+                    canon_shapes[canon_key] = result_shape
 
         repeated = {k: v for k, v in canon_counts.items() if v >= 2}
         if not repeated:
@@ -1257,6 +1403,9 @@ def _close_canonical_pairs(phase2_defs, terms,
             new_names[display_key] = canonical_name
             new_counts[display_key] = repeated[canon_key]
 
+            shape = canon_shapes[canon_key]
+            product_shapes[canonical_name] = shape
+
             seen_full = set()
             for full_key, pos, gamma in members:
                 if full_key in seen_full:
@@ -1268,6 +1417,7 @@ def _close_canonical_pairs(phase2_defs, terms,
                 product_map[full_key] = sub_name
                 product_positions[sub_name] = pos
                 product_gammas[sub_name] = gamma
+                product_shapes[sub_name] = shape
 
         terms = apply_substitution_to_terms(terms, product_map)
         new_levels.append((next_level, new_names, new_counts))
@@ -1357,14 +1507,18 @@ def optimize(terms, iterate: bool = False):
     Returns (terms, phase1_defs, phase2_defs).
     """
     terms = carve_out_per_term(terms, iterate=iterate)
-    terms, phase1_defs, product_positions = optimize_phase1(terms)
-    terms, phase2_defs, product_gammas = optimize_phase2(terms, product_positions)
+    terms, phase1_defs, product_positions, product_shapes = optimize_phase1(terms)
+    terms, phase2_defs, product_gammas = optimize_phase2(
+        terms, product_positions, product_shapes)
     phase2_defs, terms = deduplicate_phase2(phase2_defs, terms,
-                                            product_positions, product_gammas)
+                                            product_positions, product_gammas,
+                                            product_shapes)
     phase2_defs, terms = _absorb_bare_matrices(phase2_defs, terms,
-                                               product_positions, product_gammas)
+                                               product_positions, product_gammas,
+                                               product_shapes)
     phase2_defs, terms = _close_canonical_pairs(phase2_defs, terms,
-                                                product_positions, product_gammas)
+                                                product_positions, product_gammas,
+                                                product_shapes)
     phase2_defs, terms = _create_current_vertex_product(phase2_defs, terms)
     phase2_defs, terms = _renumber_with_universal_first(phase2_defs, terms)
     phase2_defs, terms = _swap_phase2_levels(phase2_defs, terms, 2, 3)
